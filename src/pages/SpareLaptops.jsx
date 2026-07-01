@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getSpareLaptops, addSpareLaptop, getDeployments, logDeployment, getSchools } from '../services/api'
+import { getSpareLaptops, addSpareLaptop, getDeployments, logDeployment, getSchools, addRepair } from '../services/api'
 import Pagination from '../components/Pagination'
+import { useAuth } from '../contexts/AuthContext'
 
 const PER_PAGE = 20
 
@@ -11,7 +12,14 @@ const emptyLaptop = {
 const emptyDeploy = {
   action: 'Deployed', school: '', takenBy: '', notes: '',
   date: new Date().toISOString().slice(0, 10),
+  problemIdentified: '', otherProblem: '',
 }
+
+const REPAIR_PROBLEMS = [
+  'CMOS battery', 'Overheating', 'No display', 'RAM issue', 'Keyboard/keys missing',
+  'Touchpad not working', 'Power button', 'Hard drive', 'Battery issue', 'Screen damage',
+  'Boot issue', 'Other',
+]
 
 export default function SpareLaptops() {
   const [laptops, setLaptops] = useState([])
@@ -28,7 +36,12 @@ export default function SpareLaptops() {
   const [deployForm, setDeployForm] = useState(emptyDeploy)
   const [deployError, setDeployError] = useState(null)
   const [schools, setSchools] = useState([])
+  const { user } = useAuth()
+  const canEdit = user?.role === 'admin' || user?.role === 'technician'
   const [page, setPage] = useState(1)
+  const [historyYearFilter, setHistoryYearFilter] = useState('All')
+  const [historyMonthFilter, setHistoryMonthFilter] = useState('All')
+  const [historyPage, setHistoryPage] = useState(1)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -70,9 +83,32 @@ export default function SpareLaptops() {
       const res = await logDeployment({
         laptopId: deploying.id,
         idNumber: deploying.idNumber,
-        ...deployForm,
+        action: deployForm.action,
+        school: deployForm.school || deploying.location,
+        takenBy: deployForm.takenBy,
+        notes: deployForm.notes,
+        date: deployForm.date,
       })
       if (res.error) { setDeployError(res.error); return }
+
+      // If returning from a school with a problem identified → also log repair intake
+      if (deployForm.action === 'Returned' && deployForm.problemIdentified && !isInWarehouse(deploying)) {
+        const problem = deployForm.problemIdentified === 'Other'
+          ? deployForm.otherProblem
+          : deployForm.problemIdentified
+        await addRepair({
+          laptopIdNumber: deploying.idNumber,
+          referenceNumber: deploying.idNumber,
+          model: [deploying.manufacturer, deploying.model].filter(Boolean).join(' '),
+          schoolName: deploying.location,
+          receivedBy: deployForm.takenBy,
+          problemIdentified: problem,
+          dateReceived: deployForm.date,
+          status: 'Received',
+          remarks: deployForm.notes || '',
+        })
+      }
+
       setLaptops((prev) => prev.map((l) =>
         l.id === deploying.id ? { ...l, location: res.newLocation } : l
       ))
@@ -80,7 +116,7 @@ export default function SpareLaptops() {
         date: deployForm.date,
         idNumber: deploying.idNumber,
         action: deployForm.action,
-        school: deployForm.school,
+        school: deployForm.school || deploying.location,
         takenBy: deployForm.takenBy,
         notes: deployForm.notes,
       }, ...prev])
@@ -113,10 +149,29 @@ export default function SpareLaptops() {
 
   const visible = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
-  const visibleHistory = deployments.filter((d) =>
-    search === '' ||
-    [d.idNumber, d.school, d.takenBy, d.action].join(' ').toLowerCase().includes(search.toLowerCase())
-  )
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+  const historyYears = ['All', ...new Set(
+    deployments.map((d) => d.date?.slice(0, 4)).filter(Boolean)
+  )].sort((a, b) => (a === 'All' ? -1 : b === 'All' ? 1 : b.localeCompare(a)))
+
+  const historyAvailableMonths = historyYearFilter === 'All' ? [] : [
+    ...new Set(
+      deployments
+        .filter((d) => d.date?.startsWith(historyYearFilter))
+        .map((d) => d.date?.slice(5, 7))
+        .filter(Boolean)
+    )
+  ].sort()
+
+  const filteredHistory = deployments.filter((d) => {
+    const matchYear = historyYearFilter === 'All' || d.date?.startsWith(historyYearFilter)
+    const matchMonth = historyMonthFilter === 'All' || d.date?.slice(5, 7) === historyMonthFilter
+    const matchSearch = search === '' ||
+      [d.idNumber, d.school, d.takenBy, d.action].join(' ').toLowerCase().includes(search.toLowerCase())
+    return matchYear && matchMonth && matchSearch
+  })
+  const visibleHistory = filteredHistory.slice((historyPage - 1) * PER_PAGE, historyPage * PER_PAGE)
 
   const counts = {
     'In Warehouse': laptops.filter(isInWarehouse).length,
@@ -127,12 +182,14 @@ export default function SpareLaptops() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h1 className="text-xl font-bold text-gray-800">Spare Laptops</h1>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
-        >
-          {showForm ? 'Cancel' : '+ Add Spare Laptop'}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
+          >
+            {showForm ? 'Cancel' : '+ Add Spare Laptop'}
+          </button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -223,6 +280,25 @@ export default function SpareLaptops() {
             ))}
           </div>
         )}
+        {tab === 'history' && (
+          <>
+            <select value={historyYearFilter}
+              onChange={(e) => { setHistoryYearFilter(e.target.value); setHistoryMonthFilter('All'); setHistoryPage(1) }}
+              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              {historyYears.map((y) => <option key={y}>{y}</option>)}
+            </select>
+            {historyYearFilter !== 'All' && historyAvailableMonths.length > 0 && (
+              <select value={historyMonthFilter}
+                onChange={(e) => { setHistoryMonthFilter(e.target.value); setHistoryPage(1) }}
+                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="All">All months</option>
+                {historyAvailableMonths.map((m) => (
+                  <option key={m} value={m}>{MONTHS[parseInt(m, 10) - 1]}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
       </div>
 
       {loading ? (
@@ -263,7 +339,7 @@ export default function SpareLaptops() {
                     </td>
                     <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={l.comments}>{l.comments || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <button
+                      {canEdit && <button
                         onClick={() => {
                           setDeploying(l)
                           setDeployForm({ ...emptyDeploy, action: isInWarehouse(l) ? 'Deployed' : 'Returned' })
@@ -276,7 +352,7 @@ export default function SpareLaptops() {
                         }`}
                       >
                         {isInWarehouse(l) ? 'Deploy →' : '← Return'}
-                      </button>
+                      </button>}
                     </td>
                   </tr>
 
@@ -293,20 +369,19 @@ export default function SpareLaptops() {
                               <option>Returned</option>
                             </select>
                           </div>
+                          {deployForm.action === 'Deployed' && (
+                            <div className="flex flex-col gap-1">
+                              <label className="text-xs font-medium text-gray-600">School / Destination <span className="text-red-500">*</span></label>
+                              <input type="text" list="deploy-school-list" value={deployForm.school} onChange={setDep('school')}
+                                required placeholder="Type or pick a school"
+                                className="w-44 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                              <datalist id="deploy-school-list">
+                                {schools.map((name) => <option key={name} value={name} />)}
+                              </datalist>
+                            </div>
+                          )}
                           <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-600">
-                              {deployForm.action === 'Deployed' ? 'School / Destination' : 'Returned from'}
-                              <span className="text-red-500 ml-0.5">*</span>
-                            </label>
-                            <input type="text" list="deploy-school-list" value={deployForm.school} onChange={setDep('school')}
-                              required placeholder="Type or pick a school"
-                              className="w-44 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                            <datalist id="deploy-school-list">
-                              {schools.map((name) => <option key={name} value={name} />)}
-                            </datalist>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-600">Taken/Handled by <span className="text-red-500">*</span></label>
+                            <label className="text-xs font-medium text-gray-600">Received/Handled by <span className="text-red-500">*</span></label>
                             <input type="text" value={deployForm.takenBy} onChange={setDep('takenBy')}
                               required placeholder="Name"
                               className="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
@@ -316,10 +391,34 @@ export default function SpareLaptops() {
                             <input type="date" value={deployForm.date} onChange={setDep('date')}
                               className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                           </div>
+                          {/* Repair fields — shown when returning a school laptop */}
+                          {deployForm.action === 'Returned' && !isInWarehouse(deploying) && (
+                            <>
+                              <div className="w-full border-t border-blue-200 pt-2 mt-1">
+                                <span className="text-xs font-semibold text-blue-700">Log repair intake at the same time:</span>
+                              </div>
+                              <div className="flex flex-col gap-1 min-w-44">
+                                <label className="text-xs font-medium text-gray-600">Problem identified</label>
+                                <select value={deployForm.problemIdentified} onChange={setDep('problemIdentified')}
+                                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                  <option value="">— skip repair log —</option>
+                                  {REPAIR_PROBLEMS.map((p) => <option key={p}>{p}</option>)}
+                                </select>
+                              </div>
+                              {deployForm.problemIdentified === 'Other' && (
+                                <div className="flex flex-col gap-1 flex-1 min-w-40">
+                                  <label className="text-xs font-medium text-gray-600">Describe problem</label>
+                                  <input type="text" value={deployForm.otherProblem} onChange={setDep('otherProblem')}
+                                    placeholder="Describe the issue..."
+                                    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                                </div>
+                              )}
+                            </>
+                          )}
                           <div className="flex flex-col gap-1 flex-1 min-w-32">
                             <label className="text-xs font-medium text-gray-600">Notes</label>
                             <input type="text" value={deployForm.notes} onChange={setDep('notes')}
-                              placeholder="Optional note"
+                              placeholder="Optional"
                               className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                           </div>
                           <div className="flex gap-2 items-end pb-0.5">
@@ -346,6 +445,7 @@ export default function SpareLaptops() {
       ) : (
 
         /* ── DEPLOYMENT HISTORY ── */
+        <>
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -377,6 +477,8 @@ export default function SpareLaptops() {
             </tbody>
           </table>
         </div>
+        <Pagination page={historyPage} total={filteredHistory.length} perPage={PER_PAGE} onChange={setHistoryPage} />
+        </>
       )}
     </div>
   )

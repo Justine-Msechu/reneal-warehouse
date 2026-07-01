@@ -21,7 +21,7 @@ export default function Login() {
       const decoded = decodeJWT(response.credential)
       if (!decoded?.email) throw new Error('Could not read Google account info.')
 
-      const data = await getUser(decoded.email)
+      const data = await getUser(decoded.email, response.credential)
       if (!data.user) {
         setError('Your Google account is not registered in the system. Contact the administrator to get access.')
         return
@@ -33,9 +33,13 @@ export default function Login() {
         picture: decoded.picture,
         role: data.user.role,
         schoolName: data.user.schoolName || null,
-      })
+      }, response.credential)
     } catch (err) {
-      setError(err.message || 'Failed to sign in. Please try again.')
+      if (err.message === 'Unauthorized') {
+        setError('Sign-in failed. Make sure the Apps Script is deployed with the latest version.')
+      } else {
+        setError(err.message || 'Failed to sign in. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

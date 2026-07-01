@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { getUsers, addUser, removeUser, getSchools } from '../services/api'
+import { getUsers, addUser, removeUser } from '../services/api'
 
-const ROLES = ['admin', 'technician', 'school']
-const emptyForm = { email: '', name: '', role: 'technician', schoolName: '' }
+const ROLES = ['admin', 'technician', 'viewer']
+const emptyForm = { email: '', name: '', role: 'technician' }
 
 export default function UserManagement() {
   const [users, setUsers] = useState([])
-  const [schools, setSchools] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -18,9 +17,8 @@ export default function UserManagement() {
   async function fetchAll() {
     setLoading(true)
     try {
-      const [ud, sd] = await Promise.all([getUsers(), getSchools()])
+      const ud = await getUsers()
       setUsers(ud.users || [])
-      setSchools((sd.schools || []).filter((s) => s.status === 'Active').map((s) => s.name).sort())
     } catch { setError('Could not load users.') }
     finally { setLoading(false) }
   }
@@ -48,7 +46,7 @@ export default function UserManagement() {
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
 
-  const roleColor = { admin: 'bg-purple-100 text-purple-700', technician: 'bg-blue-100 text-blue-700', school: 'bg-green-100 text-green-700' }
+  const roleColor = { admin: 'bg-purple-100 text-purple-700', technician: 'bg-blue-100 text-blue-700', viewer: 'bg-gray-100 text-gray-600' }
 
   return (
     <div>
@@ -83,17 +81,6 @@ export default function UserManagement() {
               {ROLES.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
             </select>
           </div>
-          {form.role === 'school' && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">School <span className="text-red-500">*</span></label>
-              <input type="text" list="um-school-list" value={form.schoolName} onChange={set('schoolName')}
-                required placeholder="Type or pick a school"
-                className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-              <datalist id="um-school-list">
-                {schools.map((s) => <option key={s} value={s} />)}
-              </datalist>
-            </div>
-          )}
           <div className="sm:col-span-2">
             <button type="submit" disabled={saving}
               className="bg-blue-700 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
@@ -104,9 +91,9 @@ export default function UserManagement() {
       )}
 
       <div className="bg-white border border-gray-200 rounded-lg mb-4 p-4 text-xs text-gray-600 space-y-1">
-        <p><span className="font-semibold text-purple-700">Admin</span> — full access to everything including user management</p>
-        <p><span className="font-semibold text-blue-700">Technician</span> — can view and edit all data except manage users</p>
-        <p><span className="font-semibold text-green-700">School</span> — read-only view of their own school's repairs only</p>
+        <p><span className="font-semibold text-purple-700">Admin</span> — full access including user management</p>
+        <p><span className="font-semibold text-blue-700">Technician</span> — full edit access: repairs, laptops, warehouse, schools (troubleshooting &amp; warehouse teams)</p>
+        <p><span className="font-semibold text-gray-600">Viewer</span> — read-only access to all data, no editing</p>
       </div>
 
       {loading ? (
@@ -120,7 +107,7 @@ export default function UserManagement() {
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Name', 'Gmail', 'Role', 'School', 'Added', ''].map((h) => (
+                {['Name', 'Gmail', 'Role', 'Added', ''].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -135,7 +122,6 @@ export default function UserManagement() {
                       {u.role}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-gray-500 text-xs">{u.schoolName || '—'}</td>
                   <td className="px-3 py-2 text-gray-400 text-xs whitespace-nowrap">{u.addedDate}</td>
                   <td className="px-3 py-2">
                     <button onClick={() => handleRemove(u)}

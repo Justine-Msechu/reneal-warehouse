@@ -15,15 +15,18 @@ export default function Layout() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
 
+  const canEdit = user?.role === 'admin' || user?.role === 'technician'
+
   const links = [
-    { to: '/', label: user?.role === 'school' ? 'My Repairs' : 'Repair Dashboard', roles: ['admin', 'technician', 'school'] },
-    { to: '/intake', label: 'Log Repair', roles: ['admin', 'technician'] },
-    { to: '/schools', label: 'Schools', roles: ['admin', 'technician'] },
-    { to: '/spare-laptops', label: 'Spare Laptops', roles: ['admin', 'technician'] },
-    { to: '/warehouse', label: 'Warehouse', roles: ['admin', 'technician'] },
-    { to: '/reports', label: 'Reports', roles: ['admin', 'technician'] },
-    { to: '/users', label: 'Users', roles: ['admin'] },
-  ].filter((l) => l.roles.includes(user?.role))
+    { to: '/', label: 'Repair Dashboard' },
+    ...(canEdit ? [{ to: '/intake', label: 'Log Repair' }] : []),
+    ...(canEdit ? [{ to: '/receive-shipment', label: 'Receive Shipment' }] : []),
+    { to: '/schools', label: 'Schools' },
+    { to: '/spare-laptops', label: 'Spare Laptops' },
+    { to: '/warehouse', label: 'Warehouse' },
+    { to: '/reports', label: 'Reports' },
+    ...(user?.role === 'admin' ? [{ to: '/users', label: 'Users' }] : []),
+  ]
 
   const navLink = ({ isActive }) =>
     `px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap ${isActive ? 'bg-white text-blue-800' : 'text-blue-100 hover:bg-blue-600'}`

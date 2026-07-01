@@ -7,13 +7,15 @@ export function AuthProvider({ children }) {
     try { return JSON.parse(sessionStorage.getItem('rws_user')) } catch { return null }
   })
 
-  function login(u) {
+  function login(u, token) {
     sessionStorage.setItem('rws_user', JSON.stringify(u))
+    if (token) sessionStorage.setItem('rws_token', token)
     setUser(u)
   }
 
   function logout() {
     sessionStorage.removeItem('rws_user')
+    sessionStorage.removeItem('rws_token')
     setUser(null)
   }
 

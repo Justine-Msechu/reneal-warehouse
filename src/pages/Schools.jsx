@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSchools, addSchool, updateSchool } from '../services/api'
 import Pagination from '../components/Pagination'
+import { useAuth } from '../contexts/AuthContext'
 
 const PER_PAGE = 25
 
@@ -28,6 +29,8 @@ export default function Schools() {
   const [deactivating, setDeactivating] = useState(null) // school being deactivated
   const [deactivateReason, setDeactivateReason] = useState('')
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
   useEffect(() => { fetchSchools() }, [])
 
@@ -122,12 +125,14 @@ export default function Schools() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h1 className="text-xl font-bold text-gray-800">Schools</h1>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
-        >
-          {showForm ? 'Cancel' : '+ Add School'}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
+          >
+            {showForm ? 'Cancel' : '+ Add School'}
+          </button>
+        )}
       </div>
 
       {/* Summary */}
@@ -277,7 +282,7 @@ export default function Schools() {
                 >
                   View repairs →
                 </button>
-                {school.status === 'Active' ? (
+                {canEdit && (school.status === 'Active' ? (
                   <button
                     onClick={() => { setDeactivating(school); setDeactivateReason('') }}
                     className="text-red-500 hover:underline"
@@ -288,11 +293,11 @@ export default function Schools() {
                   <button onClick={() => handleReactivate(school)} className="text-green-600 hover:underline">
                     Reactivate lab
                   </button>
-                )}
+                ))}
               </div>
 
               {/* Deactivate form inline */}
-              {deactivating?.id === school.id && (
+              {canEdit && deactivating?.id === school.id && (
                 <div className="mt-3 pt-3 border-t border-red-200 flex flex-wrap gap-2 items-center">
                   <input
                     type="text"

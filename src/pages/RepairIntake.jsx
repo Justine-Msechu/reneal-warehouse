@@ -9,6 +9,7 @@ const PROBLEMS = [
 ]
 
 const empty = {
+  laptopIdNumber: '',
   referenceNumber: '',
   model: '',
   dateReceived: new Date().toISOString().slice(0, 10),
@@ -69,6 +70,16 @@ export default function RepairIntake() {
 
       <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Spare Laptop ID">
+            <input
+              type="text"
+              value={form.laptopIdNumber}
+              onChange={set('laptopIdNumber')}
+              placeholder="e.g. AS-1960 (if tracked in Spare Laptops)"
+              className={input}
+            />
+          </Field>
+
           <Field label="Device / Reference Number" required>
             <input
               type="text"

@@ -10,6 +10,7 @@ import WarehouseInventory from './pages/WarehouseInventory'
 import Schools from './pages/Schools'
 import Reports from './pages/Reports'
 import UserManagement from './pages/UserManagement'
+import ReceiveShipment from './pages/ReceiveShipment'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
@@ -24,23 +25,14 @@ function AppRoutes() {
     )
   }
 
-  // School role: only sees their own school's repairs
-  if (user.role === 'school') {
-    return (
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<RepairDashboard />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    )
-  }
+  const canEdit = user.role === 'admin' || user.role === 'technician'
 
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<RepairDashboard />} />
-        <Route path="intake" element={<RepairIntake />} />
+        {canEdit && <Route path="intake" element={<RepairIntake />} />}
+        {canEdit && <Route path="receive-shipment" element={<ReceiveShipment />} />}
         <Route path="schools" element={<Schools />} />
         <Route path="spare-laptops" element={<SpareLaptops />} />
         <Route path="warehouse" element={<WarehouseInventory />} />

@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getInventory, addInventoryItem, updateInventoryItem, getWithdrawals, logWithdrawal, getSchools } from '../services/api'
+import Pagination from '../components/Pagination'
+import { useAuth } from '../contexts/AuthContext'
+
+const PER_PAGE = 20
 
 const emptyItem = { boxName: '', item: '', quantity: '', description: '' }
 const emptyOut = { quantityTaken: '', takenBy: '', destination: '', notes: '', date: new Date().toISOString().slice(0, 10) }
@@ -12,6 +16,10 @@ export default function WarehouseInventory() {
   const [tab, setTab] = useState('inventory') // 'inventory' | 'history'
   const [search, setSearch] = useState('')
   const [boxFilter, setBoxFilter] = useState('All')
+  const [page, setPage] = useState(1)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyYearFilter, setHistoryYearFilter] = useState('All')
+  const [historyMonthFilter, setHistoryMonthFilter] = useState('All')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyItem)
   const [saving, setSaving] = useState(false)
@@ -19,6 +27,8 @@ export default function WarehouseInventory() {
   const [outForm, setOutForm] = useState(emptyOut)
   const [outError, setOutError] = useState(null)
   const [schools, setSchools] = useState([])
+  const { user } = useAuth()
+  const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
   useEffect(() => { fetchAll() }, [])
 
@@ -91,28 +101,50 @@ export default function WarehouseInventory() {
 
   const boxes = ['All', ...new Set(items.map((i) => i.boxName).filter(Boolean))]
 
-  const visible = items.filter((i) => {
+  const filtered = items.filter((i) => {
     const matchBox = boxFilter === 'All' || i.boxName === boxFilter
     const matchSearch = search === '' ||
       [i.boxName, i.item, i.description].join(' ').toLowerCase().includes(search.toLowerCase())
     return matchBox && matchSearch
   })
+  const visible = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
-  const visibleHistory = withdrawals.filter((w) =>
-    search === '' ||
-    [w.item, w.boxName, w.takenBy, w.destination].join(' ').toLowerCase().includes(search.toLowerCase())
-  )
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+  const historyYears = ['All', ...new Set(
+    withdrawals.map((w) => w.date?.slice(0, 4)).filter(Boolean)
+  )].sort((a, b) => (a === 'All' ? -1 : b === 'All' ? 1 : b.localeCompare(a)))
+
+  const historyAvailableMonths = historyYearFilter === 'All' ? [] : [
+    ...new Set(
+      withdrawals
+        .filter((w) => w.date?.startsWith(historyYearFilter))
+        .map((w) => w.date?.slice(5, 7))
+        .filter(Boolean)
+    )
+  ].sort()
+
+  const filteredHistory = withdrawals.filter((w) => {
+    const matchYear = historyYearFilter === 'All' || w.date?.startsWith(historyYearFilter)
+    const matchMonth = historyMonthFilter === 'All' || w.date?.slice(5, 7) === historyMonthFilter
+    const matchSearch = search === '' ||
+      [w.item, w.boxName, w.takenBy, w.destination].join(' ').toLowerCase().includes(search.toLowerCase())
+    return matchYear && matchMonth && matchSearch
+  })
+  const visibleHistory = filteredHistory.slice((historyPage - 1) * PER_PAGE, historyPage * PER_PAGE)
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h1 className="text-xl font-bold text-gray-800">Warehouse Inventory</h1>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
-        >
-          {showForm ? 'Cancel' : '+ Add Item'}
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap"
+          >
+            {showForm ? 'Cancel' : '+ Add Item'}
+          </button>
+        )}
       </div>
 
       {/* Add item form */}
@@ -168,14 +200,33 @@ export default function WarehouseInventory() {
           type="text"
           placeholder={tab === 'inventory' ? 'Search items...' : 'Search withdrawals...'}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); setHistoryPage(1) }}
           className="border border-gray-300 rounded px-3 py-2 text-sm flex-1 min-w-48 focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
         {tab === 'inventory' && (
-          <select value={boxFilter} onChange={(e) => setBoxFilter(e.target.value)}
+          <select value={boxFilter} onChange={(e) => { setBoxFilter(e.target.value); setPage(1) }}
             className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
             {boxes.map((b) => <option key={b}>{b}</option>)}
           </select>
+        )}
+        {tab === 'history' && (
+          <>
+            <select value={historyYearFilter}
+              onChange={(e) => { setHistoryYearFilter(e.target.value); setHistoryMonthFilter('All'); setHistoryPage(1) }}
+              className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              {historyYears.map((y) => <option key={y}>{y}</option>)}
+            </select>
+            {historyYearFilter !== 'All' && historyAvailableMonths.length > 0 && (
+              <select value={historyMonthFilter}
+                onChange={(e) => { setHistoryMonthFilter(e.target.value); setHistoryPage(1) }}
+                className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="All">All months</option>
+                {historyAvailableMonths.map((m) => (
+                  <option key={m} value={m}>{MONTHS[parseInt(m, 10) - 1]}</option>
+                ))}
+              </select>
+            )}
+          </>
         )}
       </div>
 
@@ -186,6 +237,7 @@ export default function WarehouseInventory() {
       ) : tab === 'inventory' ? (
 
         /* ── STOCK TABLE ── */
+        <>
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -210,12 +262,14 @@ export default function WarehouseInventory() {
                     </td>
                     <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={item.description}>{item.description || '—'}</td>
                     <td className="px-3 py-2">
-                      <button
-                        onClick={() => { setTakingOut(item); setOutForm(emptyOut); setOutError(null) }}
-                        className="text-xs bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
-                      >
-                        Take out
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => { setTakingOut(item); setOutForm(emptyOut); setOutError(null) }}
+                          className="text-xs bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
+                        >
+                          Take out
+                        </button>
+                      )}
                     </td>
                   </tr>
 
@@ -274,10 +328,13 @@ export default function WarehouseInventory() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} total={filtered.length} perPage={PER_PAGE} onChange={setPage} />
+        </>
 
       ) : (
 
         /* ── WITHDRAWAL HISTORY ── */
+        <>
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -305,6 +362,8 @@ export default function WarehouseInventory() {
             </tbody>
           </table>
         </div>
+        <Pagination page={historyPage} total={filteredHistory.length} perPage={PER_PAGE} onChange={setHistoryPage} />
+        </>
       )}
     </div>
   )

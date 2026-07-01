@@ -18,6 +18,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [section, setSection] = useState('all') // 'all' | 'repairs' | 'warehouse' | 'laptops'
+  const [yearFilter, setYearFilter] = useState('All')
 
   useEffect(() => { fetchAll() }, [])
 
@@ -46,7 +47,18 @@ export default function Reports() {
   if (loading) return <div className="text-center py-16 text-gray-500">Loading report...</div>
   if (error)   return <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>
 
-  const { repairs, laptops, inventory, schools, withdrawals, deployments } = data
+  const { repairs: allRepairs, laptops, inventory, schools, withdrawals: allWithdrawals, deployments: allDeployments } = data
+
+  // ── Year filter ──
+  const availableYears = ['All', ...new Set([
+    ...allRepairs.map((r) => r.dateReceived?.slice(0, 4)),
+    ...allWithdrawals.map((w) => w.date?.slice(0, 4)),
+    ...allDeployments.map((d) => d.date?.slice(0, 4)),
+  ].filter(Boolean))].sort((a, b) => (a === 'All' ? -1 : b === 'All' ? 1 : b.localeCompare(a)))
+
+  const repairs = yearFilter === 'All' ? allRepairs : allRepairs.filter((r) => r.dateReceived?.startsWith(yearFilter))
+  const withdrawals = yearFilter === 'All' ? allWithdrawals : allWithdrawals.filter((w) => w.date?.startsWith(yearFilter))
+  const deployments = yearFilter === 'All' ? allDeployments : allDeployments.filter((d) => d.date?.startsWith(yearFilter))
 
   // ── Repair stats ──
   const repairByStatus = Object.entries(
@@ -54,7 +66,7 @@ export default function Reports() {
   ).map(([name, value]) => ({ name, value }))
 
   const repairByYear = Object.entries(
-    repairs.reduce((acc, r) => {
+    allRepairs.reduce((acc, r) => {
       const y = r.dateReceived?.slice(0, 4) || 'Unknown'
       acc[y] = (acc[y] || 0) + 1; return acc
     }, {})
@@ -96,8 +108,8 @@ export default function Reports() {
     { label: 'Active Schools', value: schools.filter(s => s.status === 'Active').length, sub: `${schools.filter(s => s.status === 'Deactivated').length} deactivated`, color: 'green' },
     { label: 'Spare Laptops', value: laptops.length, sub: `${laptopStatus[1].value} deployed`, color: 'purple' },
     { label: 'Warehouse Items', value: inventory.length, sub: `${lowStock.length + outOfStock.length} need attention`, color: 'amber' },
-    { label: 'Withdrawals', value: withdrawals.length, sub: 'total logged', color: 'cyan' },
-    { label: 'Deployments', value: deployments.length, sub: 'laptop movements', color: 'indigo' },
+    { label: 'Withdrawals', value: withdrawals.length, sub: yearFilter === 'All' ? 'total logged' : `in ${yearFilter}`, color: 'cyan' },
+    { label: 'Deployments', value: deployments.length, sub: yearFilter === 'All' ? 'laptop movements' : `in ${yearFilter}`, color: 'indigo' },
   ]
 
   const kpiColors = { blue: 'border-blue-200 bg-blue-50', green: 'border-green-200 bg-green-50',
@@ -119,7 +131,11 @@ export default function Reports() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
         <h1 className="text-xl font-bold text-gray-800">Reports</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}
+            className="border border-gray-300 rounded px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+            {availableYears.map((y) => <option key={y}>{y}</option>)}
+          </select>
           <div className="flex gap-1">
             {sections.map((s) => (
               <button key={s.key} onClick={() => setSection(s.key)}
@@ -177,8 +193,8 @@ export default function Reports() {
               </div>
             </Card>
 
-            {/* Repairs by year */}
-            <Card title="Repairs by Year">
+            {/* Repairs by year — always shows all years for trend context */}
+            <Card title={yearFilter === 'All' ? 'Repairs by Year' : `All Years (${yearFilter} highlighted)`}>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={repairByYear} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />

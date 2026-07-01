@@ -1,5 +1,20 @@
 const SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || ''
-const API_KEY = import.meta.env.VITE_API_KEY || ''
+
+// ── Auth token ────────────────────────────────────────────────
+// Reads the Google ID token stored at login. If expired, clears session.
+function getToken() {
+  const token = sessionStorage.getItem('rws_token')
+  if (!token) return ''
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (payload.exp && Date.now() / 1000 > payload.exp) {
+      sessionStorage.clear()
+      window.location.reload()
+      return ''
+    }
+  } catch {}
+  return token
+}
 
 // ── Cache (localStorage) ──────────────────────────────────────
 // Online: serve cache if fresh (< 5 min), else fetch
@@ -24,14 +39,25 @@ function bust(...keys) {
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────
-async function request(params) {
+function handleAuthError(data) {
+  if (data.error === 'Unauthorized' || data.error === 'Forbidden') {
+    // Only reload if already logged in — don't loop during the login request itself
+    if (sessionStorage.getItem('rws_token')) {
+      sessionStorage.clear()
+      window.location.reload()
+    }
+    throw new Error(data.error === 'Forbidden' ? 'You do not have permission for this action.' : 'Unauthorized')
+  }
+}
+
+async function request(params, tokenOverride) {
   const url = new URL(SCRIPT_URL)
-  url.searchParams.set('key', API_KEY)
+  url.searchParams.set('token', tokenOverride || getToken())
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
   const res = await fetch(url.toString())
   if (!res.ok) throw new Error(`Request failed: ${res.status}`)
   const data = await res.json()
-  if (data.error === 'Unauthorized') throw new Error('Unauthorized')
+  handleAuthError(data)
   return data
 }
 
@@ -39,11 +65,11 @@ async function post(body) {
   if (!navigator.onLine) throw new Error('You are offline. Connect to the internet to save changes.')
   const res = await fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ ...body, key: API_KEY }),
+    body: JSON.stringify({ ...body, token: getToken() }),
   })
   if (!res.ok) throw new Error(`Request failed: ${res.status}`)
   const data = await res.json()
-  if (data.error === 'Unauthorized') throw new Error('Unauthorized')
+  handleAuthError(data)
   return data
 }
 
@@ -102,7 +128,8 @@ export const getDeployments = () => cachedGet('deployments', { action: 'getDeplo
 export const logDeployment = (data) => { bust('deployments', 'laptops'); return post({ action: 'logDeployment', ...data }) }
 
 // ── Users ─────────────────────────────────────────────────────
-export const getUser = (email) => request({ action: 'getUser', email })
+// getUser is called at login before the token is in sessionStorage, so we pass it explicitly
+export const getUser = (email, token) => request({ action: 'getUser', email }, token)
 export const getUsers = () => cachedGet('users', { action: 'getUsers' })
 export const addUser = (data) => { bust('users'); return post({ action: 'addUser', ...data }) }
 export const removeUser = (data) => { bust('users'); return post({ action: 'removeUser', ...data }) }
