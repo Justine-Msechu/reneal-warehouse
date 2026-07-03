@@ -133,3 +133,8 @@ export const getUser = (email, token) => request({ action: 'getUser', email }, t
 export const getUsers = () => cachedGet('users', { action: 'getUsers' })
 export const addUser = (data) => { bust('users'); return post({ action: 'addUser', ...data }) }
 export const removeUser = (data) => { bust('users'); return post({ action: 'removeUser', ...data }) }
+
+// ── AI Assistant ──────────────────────────────────────────────
+// confirm must be explicitly set to true to let the assistant run a
+// data-changing tool (e.g. updateRepairStatus, assignTechnician).
+export const askAI = (question, confirm = false) => post({ action: 'askAI', question, confirm })

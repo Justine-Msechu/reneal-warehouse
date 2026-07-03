@@ -25,6 +25,7 @@ export default function Layout() {
     { to: '/spare-laptops', label: 'Spare Laptops' },
     { to: '/warehouse', label: 'Warehouse' },
     { to: '/reports', label: 'Reports' },
+    { to: '/assistant', label: 'AI Assistant' },
     ...(user?.role === 'admin' ? [{ to: '/users', label: 'Users' }] : []),
   ]
 

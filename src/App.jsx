@@ -11,6 +11,7 @@ import Schools from './pages/Schools'
 import Reports from './pages/Reports'
 import UserManagement from './pages/UserManagement'
 import ReceiveShipment from './pages/ReceiveShipment'
+import Assistant from './pages/Assistant'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="spare-laptops" element={<SpareLaptops />} />
         <Route path="warehouse" element={<WarehouseInventory />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="assistant" element={<Assistant />} />
         {user.role === 'admin' && <Route path="users" element={<UserManagement />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
