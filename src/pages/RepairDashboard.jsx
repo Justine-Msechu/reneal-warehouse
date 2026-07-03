@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import StatusBadge from '../components/StatusBadge'
 import { getRepairs, updateRepair, getSpareLaptops, logDeployment } from '../services/api'
@@ -321,8 +321,8 @@ export default function RepairDashboard() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {visible.map((r) => (
-                  <>
-                  <tr key={r.id} className="hover:bg-gray-50">
+                  <Fragment key={r.id}>
+                  <tr className="hover:bg-gray-50">
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="font-mono text-xs text-blue-700 font-semibold">{r.referenceNumber}</div>
                       {r.laptopIdNumber && (
@@ -360,7 +360,7 @@ export default function RepairDashboard() {
                     </td>
                   </tr>
                   {redeploying === r.id && (
-                    <tr key={r.id + '-redeploy'}>
+                    <tr>
                       <td colSpan={7} className="px-3 py-3 bg-green-50 border-b border-green-200">
                         <div className="flex flex-wrap gap-2 items-end">
                           <div>
@@ -394,7 +394,7 @@ export default function RepairDashboard() {
                       </td>
                     </tr>
                   )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

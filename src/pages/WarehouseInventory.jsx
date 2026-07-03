@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { getInventory, addInventoryItem, updateInventoryItem, getWithdrawals, logWithdrawal, getSchools } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
@@ -39,7 +39,7 @@ export default function WarehouseInventory() {
       const [invData, wData, schoolData] = await Promise.all([getInventory(), getWithdrawals(), getSchools()])
       setItems(invData.items || [])
       setWithdrawals(wData.withdrawals || [])
-      setSchools((schoolData.schools || []).filter((s) => s.status === 'Active').map((s) => s.name).sort())
+      setSchools([...new Set((schoolData.schools || []).filter((s) => s.status === 'Active').map((s) => s.name))].sort())
     } catch {
       setError('Could not load warehouse data.')
     } finally {
@@ -251,8 +251,8 @@ export default function WarehouseInventory() {
               {visible.length === 0 ? (
                 <tr><td colSpan={5} className="text-center py-8 text-gray-400">No items found.</td></tr>
               ) : visible.map((item) => (
-                <>
-                  <tr key={item.id} className="hover:bg-gray-50">
+                <Fragment key={item.id}>
+                  <tr className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-semibold text-blue-700 whitespace-nowrap">{item.boxName}</td>
                     <td className="px-3 py-2">{item.item}</td>
                     <td className="px-3 py-2">
@@ -275,7 +275,7 @@ export default function WarehouseInventory() {
 
                   {/* Inline take-out form */}
                   {takingOut?.id === item.id && (
-                    <tr key={item.id + '-out'}>
+                    <tr>
                       <td colSpan={5} className="px-3 py-3 bg-amber-50 border-b border-amber-200">
                         <form onSubmit={handleTakeOut} className="flex flex-wrap gap-2 items-end">
                           <div className="flex flex-col gap-1">
@@ -323,7 +323,7 @@ export default function WarehouseInventory() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

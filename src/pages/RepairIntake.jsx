@@ -31,7 +31,7 @@ export default function RepairIntake() {
 
   useEffect(() => {
     getSchools()
-      .then((d) => setSchools((d.schools || []).filter((s) => s.status === 'Active').map((s) => s.name).sort()))
+      .then((d) => setSchools([...new Set((d.schools || []).filter((s) => s.status === 'Active').map((s) => s.name))].sort()))
       .catch(() => {})
   }, [])
 

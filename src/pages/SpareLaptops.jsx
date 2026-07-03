@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { getSpareLaptops, addSpareLaptop, getDeployments, logDeployment, getSchools, addRepair } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
@@ -52,7 +52,7 @@ export default function SpareLaptops() {
       const [lapData, depData, schoolData] = await Promise.all([getSpareLaptops(), getDeployments(), getSchools()])
       setLaptops(lapData.laptops || [])
       setDeployments(depData.deployments || [])
-      setSchools((schoolData.schools || []).filter((s) => s.status === 'Active').map((s) => s.name).sort())
+      setSchools([...new Set((schoolData.schools || []).filter((s) => s.status === 'Active').map((s) => s.name))].sort())
     } catch {
       setError('Could not load spare laptops.')
     } finally {
@@ -322,8 +322,8 @@ export default function SpareLaptops() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visible.map((l) => (
-                <>
-                  <tr key={l.id} className="hover:bg-gray-50">
+                <Fragment key={l.id}>
+                  <tr className="hover:bg-gray-50">
                     <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold whitespace-nowrap">{l.idNumber}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{l.manufacturer} {l.model}</td>
                     <td className="px-3 py-2 text-gray-600">{l.cpu}</td>
@@ -358,7 +358,7 @@ export default function SpareLaptops() {
 
                   {/* Inline deploy/return form */}
                   {deploying?.id === l.id && (
-                    <tr key={l.id + '-deploy'}>
+                    <tr>
                       <td colSpan={7} className="px-3 py-3 bg-blue-50 border-b border-blue-200">
                         <form onSubmit={handleDeploy} className="flex flex-wrap gap-2 items-end">
                           <div className="flex flex-col gap-1">
@@ -434,7 +434,7 @@ export default function SpareLaptops() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
