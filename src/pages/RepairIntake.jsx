@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { addRepair, getSchools } from '../services/api'
+import { addRepair, getSchools, getUsers } from '../services/api'
 
 const PROBLEMS = [
   'CMOS battery', 'Overheating', 'No display', 'RAM issue', 'Keyboard/keys missing',
@@ -27,11 +27,20 @@ export default function RepairIntake() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState(null)
   const [schools, setSchools] = useState([])
+  const [technicians, setTechnicians] = useState([])
   const navigate = useNavigate()
 
   useEffect(() => {
     getSchools()
       .then((d) => setSchools([...new Set((d.schools || []).filter((s) => s.status === 'Active').map((s) => s.name))].sort()))
+      .catch(() => {})
+    // Sourced from Users (not free text) so the same person's name is always
+    // spelled the same way in every repair record — see e.g. "Justine Msechu"
+    // vs "Justine" showing up as two different technicians before this fix.
+    getUsers()
+      .then((d) => setTechnicians(
+        [...new Set((d.users || []).filter((u) => u.role === 'admin' || u.role === 'technician').map((u) => u.name))].sort()
+      ))
       .catch(() => {})
   }, [])
 
@@ -138,13 +147,10 @@ export default function RepairIntake() {
           </Field>
 
           <Field label="Assign Technician">
-            <input
-              type="text"
-              value={form.technician}
-              onChange={set('technician')}
-              placeholder="e.g. Justine, Erick, Ashura"
-              className={input}
-            />
+            <select value={form.technician} onChange={set('technician')} className={input}>
+              <option value="">Unassigned</option>
+              {technicians.map((name) => <option key={name}>{name}</option>)}
+            </select>
           </Field>
         </div>
 
