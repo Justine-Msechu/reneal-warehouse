@@ -37,5 +37,12 @@ export default defineConfig({
         storageQuota: 10000000,
       },
     },
+    // Tests must never depend on real .env values being present (they
+    // aren't in CI — VITE_APPS_SCRIPT_URL is only injected for the actual
+    // build step). A syntactically-valid dummy keeps `new URL(...)` in
+    // api.js from throwing regardless of environment.
+    env: {
+      VITE_APPS_SCRIPT_URL: 'https://script.google.com/macros/s/test-placeholder/exec',
+    },
   },
 })
