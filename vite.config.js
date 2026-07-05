@@ -28,4 +28,14 @@ export default defineConfig({
     }),
   ],
   base: '/reneal-warehouse/',
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost:3000',
+        storageQuota: 10000000,
+      },
+    },
+  },
 })
