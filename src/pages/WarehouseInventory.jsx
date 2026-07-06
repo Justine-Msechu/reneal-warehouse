@@ -27,6 +27,7 @@ export default function WarehouseInventory() {
   const [outForm, setOutForm] = useState(emptyOut)
   const [outError, setOutError] = useState(null)
   const [schools, setSchools] = useState([])
+  const [expandedBoxes, setExpandedBoxes] = useState(new Set())
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
@@ -99,6 +100,14 @@ export default function WarehouseInventory() {
   const setField = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
   const setOut = (f) => (e) => setOutForm((p) => ({ ...p, [f]: e.target.value }))
 
+  function toggleBox(boxName) {
+    setExpandedBoxes((prev) => {
+      const next = new Set(prev)
+      next.has(boxName) ? next.delete(boxName) : next.add(boxName)
+      return next
+    })
+  }
+
   const boxes = ['All', ...new Set(items.map((i) => i.boxName).filter(Boolean))]
 
   const filtered = items.filter((i) => {
@@ -111,6 +120,11 @@ export default function WarehouseInventory() {
 
   // Groups same-box items together (regardless of their original row order)
   // so the box name is shown once as a section header, not on every row.
+  // Boxes are collapsed by default — but if a search or box filter is
+  // active, every box still showing here necessarily contains a match
+  // (filtering already happened above), so auto-expand those rather than
+  // hiding results behind a collapsed header.
+  const autoExpand = search.trim() !== '' || boxFilter !== 'All'
   const groupedByBox = (() => {
     const map = new Map()
     visible.forEach((item) => {
@@ -118,7 +132,11 @@ export default function WarehouseInventory() {
       if (!map.has(key)) map.set(key, [])
       map.get(key).push(item)
     })
-    return [...map.entries()].map(([boxName, boxItems]) => ({ boxName, boxItems }))
+    return [...map.entries()].map(([boxName, boxItems]) => ({
+      boxName,
+      boxItems,
+      isExpanded: autoExpand || expandedBoxes.has(boxName),
+    }))
   })()
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -264,12 +282,17 @@ export default function WarehouseInventory() {
                 <tr><td colSpan={4} className="text-center py-8 text-gray-400">No items found.</td></tr>
               ) : groupedByBox.map((group) => (
                 <Fragment key={group.boxName}>
-                  <tr className="bg-blue-50">
+                  <tr
+                    className="bg-blue-50 cursor-pointer hover:bg-blue-100 select-none"
+                    onClick={() => toggleBox(group.boxName)}
+                  >
                     <td colSpan={4} className="px-3 py-1.5 font-bold text-blue-800 text-xs uppercase tracking-wide">
-                      {group.boxName}
+                      <span className="inline-block w-3">{group.isExpanded ? '▾' : '▸'}</span>
+                      {' '}{group.boxName}
+                      <span className="ml-2 font-normal normal-case text-blue-400">({group.boxItems.length})</span>
                     </td>
                   </tr>
-                  {group.boxItems.map((item) => (
+                  {group.isExpanded && group.boxItems.map((item) => (
                     <Fragment key={item.id}>
                       <tr className="hover:bg-gray-50">
                         <td className="px-3 py-2">{item.item}</td>
