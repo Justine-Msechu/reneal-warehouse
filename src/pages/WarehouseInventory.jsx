@@ -109,6 +109,18 @@ export default function WarehouseInventory() {
   })
   const visible = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
+  // Groups same-box items together (regardless of their original row order)
+  // so the box name is shown once as a section header, not on every row.
+  const groupedByBox = (() => {
+    const map = new Map()
+    visible.forEach((item) => {
+      const key = item.boxName || '(No box)'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(item)
+    })
+    return [...map.entries()].map(([boxName, boxItems]) => ({ boxName, boxItems }))
+  })()
+
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
   const historyYears = ['All', ...new Set(
@@ -242,87 +254,95 @@ export default function WarehouseInventory() {
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Box', 'Item', 'Qty', 'Description', ''].map((h) => (
+                {['Item', 'Qty', 'Description', ''].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visible.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-8 text-gray-400">No items found.</td></tr>
-              ) : visible.map((item) => (
-                <Fragment key={item.id}>
-                  <tr className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-semibold text-blue-700 whitespace-nowrap">{item.boxName}</td>
-                    <td className="px-3 py-2">{item.item}</td>
-                    <td className="px-3 py-2">
-                      <span className={`font-semibold ${Number(item.quantity) === 0 ? 'text-red-500' : Number(item.quantity) <= 3 ? 'text-amber-500' : 'text-gray-800'}`}>
-                        {item.quantity}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={item.description}>{item.description || '—'}</td>
-                    <td className="px-3 py-2">
-                      {canEdit && (
-                        <button
-                          onClick={() => { setTakingOut(item); setOutForm(emptyOut); setOutError(null) }}
-                          className="text-xs bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
-                        >
-                          Take out
-                        </button>
-                      )}
+                <tr><td colSpan={4} className="text-center py-8 text-gray-400">No items found.</td></tr>
+              ) : groupedByBox.map((group) => (
+                <Fragment key={group.boxName}>
+                  <tr className="bg-blue-50">
+                    <td colSpan={4} className="px-3 py-1.5 font-bold text-blue-800 text-xs uppercase tracking-wide">
+                      {group.boxName}
                     </td>
                   </tr>
-
-                  {/* Inline take-out form */}
-                  {takingOut?.id === item.id && (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-3 bg-amber-50 border-b border-amber-200">
-                        <form onSubmit={handleTakeOut} className="flex flex-wrap gap-2 items-end">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-600">Qty taken <span className="text-red-500">*</span></label>
-                            <input type="number" min="1" value={outForm.quantityTaken} onChange={setOut('quantityTaken')}
-                              required placeholder="0"
-                              className="w-20 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-600">Taken by <span className="text-red-500">*</span></label>
-                            <input type="text" value={outForm.takenBy} onChange={setOut('takenBy')}
-                              required placeholder="Name"
-                              className="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-600">Destination / School</label>
-                            <input type="text" list="school-list" value={outForm.destination} onChange={setOut('destination')}
-                              placeholder="Type or pick a school"
-                              className="w-44 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                            <datalist id="school-list">
-                              {schools.map((name) => <option key={name} value={name} />)}
-                            </datalist>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-600">Date</label>
-                            <input type="date" value={outForm.date} onChange={setOut('date')}
-                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                          </div>
-                          <div className="flex flex-col gap-1 flex-1 min-w-32">
-                            <label className="text-xs font-medium text-gray-600">Notes</label>
-                            <input type="text" value={outForm.notes} onChange={setOut('notes')}
-                              placeholder="Optional note"
-                              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                          </div>
-                          <div className="flex gap-2 items-end pb-0.5">
-                            <button type="submit" disabled={saving}
-                              className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-amber-700 disabled:opacity-60">
-                              {saving ? '...' : 'Confirm'}
+                  {group.boxItems.map((item) => (
+                    <Fragment key={item.id}>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-3 py-2">{item.item}</td>
+                        <td className="px-3 py-2">
+                          <span className={`font-semibold ${Number(item.quantity) === 0 ? 'text-red-500' : Number(item.quantity) <= 3 ? 'text-amber-500' : 'text-gray-800'}`}>
+                            {item.quantity}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={item.description}>{item.description || '—'}</td>
+                        <td className="px-3 py-2">
+                          {canEdit && (
+                            <button
+                              onClick={() => { setTakingOut(item); setOutForm(emptyOut); setOutError(null) }}
+                              className="text-xs bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
+                            >
+                              Take out
                             </button>
-                            <button type="button" onClick={() => setTakingOut(null)}
-                              className="text-gray-400 text-sm hover:underline">Cancel</button>
-                          </div>
-                        </form>
-                        {outError && <p className="mt-2 text-xs text-red-600">{outError}</p>}
-                      </td>
-                    </tr>
-                  )}
+                          )}
+                        </td>
+                      </tr>
+
+                      {/* Inline take-out form */}
+                      {takingOut?.id === item.id && (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-3 bg-amber-50 border-b border-amber-200">
+                            <form onSubmit={handleTakeOut} className="flex flex-wrap gap-2 items-end">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-xs font-medium text-gray-600">Qty taken <span className="text-red-500">*</span></label>
+                                <input type="number" min="1" value={outForm.quantityTaken} onChange={setOut('quantityTaken')}
+                                  required placeholder="0"
+                                  className="w-20 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-xs font-medium text-gray-600">Taken by <span className="text-red-500">*</span></label>
+                                <input type="text" value={outForm.takenBy} onChange={setOut('takenBy')}
+                                  required placeholder="Name"
+                                  className="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-xs font-medium text-gray-600">Destination / School</label>
+                                <input type="text" list="school-list" value={outForm.destination} onChange={setOut('destination')}
+                                  placeholder="Type or pick a school"
+                                  className="w-44 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                                <datalist id="school-list">
+                                  {schools.map((name) => <option key={name} value={name} />)}
+                                </datalist>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-xs font-medium text-gray-600">Date</label>
+                                <input type="date" value={outForm.date} onChange={setOut('date')}
+                                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                              </div>
+                              <div className="flex flex-col gap-1 flex-1 min-w-32">
+                                <label className="text-xs font-medium text-gray-600">Notes</label>
+                                <input type="text" value={outForm.notes} onChange={setOut('notes')}
+                                  placeholder="Optional note"
+                                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                              </div>
+                              <div className="flex gap-2 items-end pb-0.5">
+                                <button type="submit" disabled={saving}
+                                  className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-amber-700 disabled:opacity-60">
+                                  {saving ? '...' : 'Confirm'}
+                                </button>
+                                <button type="button" onClick={() => setTakingOut(null)}
+                                  className="text-gray-400 text-sm hover:underline">Cancel</button>
+                              </div>
+                            </form>
+                            {outError && <p className="mt-2 text-xs text-red-600">{outError}</p>}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
                 </Fragment>
               ))}
             </tbody>
