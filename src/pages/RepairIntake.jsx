@@ -56,8 +56,8 @@ export default function RepairIntake() {
       await addRepair({ ...form, problemIdentified: problem, status: 'Received' })
       setSuccess(true)
       setTimeout(() => navigate('/'), 1500)
-    } catch {
-      setError('Failed to save. Check your Apps Script URL in .env.')
+    } catch (err) {
+      setError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
     } finally {
       setSubmitting(false)
     }

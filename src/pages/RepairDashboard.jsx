@@ -1,7 +1,7 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import StatusBadge from '../components/StatusBadge'
-import { getRepairs, updateRepair, getSpareLaptops, logDeployment } from '../services/api'
+import { getRepairs, updateRepair, getSpareLaptops, logDeployment, getSchools, getUsers } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -23,12 +23,26 @@ export default function RepairDashboard() {
   const [redeployForm, setRedeployForm] = useState({ takenBy: '', date: new Date().toISOString().slice(0, 10) })
   const [redeployError, setRedeployError] = useState(null)
   const [redeployLoading, setRedeployLoading] = useState(false)
+  const [editingRepair, setEditingRepair] = useState(null) // repair being edited, or null
+  const [editForm, setEditForm] = useState({})
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [schools, setSchools] = useState([])
+  const [technicians, setTechnicians] = useState([])
   const location = useLocation()
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
   useEffect(() => {
     fetchRepairs()
+    getSchools()
+      .then((d) => setSchools([...new Set((d.schools || []).map((s) => s.name))].sort()))
+      .catch(() => {})
+    getUsers()
+      .then((d) => setTechnicians(
+        [...new Set((d.users || []).filter((u) => u.role === 'admin' || u.role === 'technician').map((u) => u.name))].sort()
+      ))
+      .catch(() => {})
   }, [])
 
   // Support ?school= from Schools page "View repairs →" link
@@ -50,8 +64,8 @@ export default function RepairDashboard() {
     try {
       const data = await getRepairs()
       setRepairs(data.repairs || [])
-    } catch {
-      setError('Could not load repairs. Check your Apps Script URL in .env.')
+    } catch (err) {
+      setError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Could not load repairs: ${err.message}`)
     } finally {
       setLoading(false)
     }
@@ -106,6 +120,41 @@ export default function RepairDashboard() {
       setRedeployError('Failed to re-deploy. Try again.')
     } finally {
       setRedeployLoading(false)
+    }
+  }
+
+  function openEdit(repair) {
+    setEditingRepair(repair)
+    setEditError(null)
+    setEditForm({
+      referenceNumber: repair.referenceNumber || '',
+      laptopIdNumber: repair.laptopIdNumber || '',
+      model: repair.model || '',
+      dateReceived: repair.dateReceived || '',
+      schoolName: repair.schoolName || '',
+      receivedBy: repair.receivedBy || '',
+      problemIdentified: repair.problemIdentified || '',
+      technician: repair.technician || '',
+      remarks: repair.remarks || '',
+    })
+  }
+
+  async function handleEditSave(e) {
+    e.preventDefault()
+    if (!editForm.referenceNumber.trim() || !editForm.schoolName.trim() || !editForm.problemIdentified.trim()) {
+      setEditError('Device/Reference Number, School Name, and Problem Identified are required.')
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await updateRepair({ id: editingRepair.id, ...editForm })
+      setRepairs((prev) => prev.map((r) => (r.id === editingRepair.id ? { ...r, ...editForm } : r)))
+      setEditingRepair(null)
+    } catch (err) {
+      setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -263,16 +312,24 @@ export default function RepairDashboard() {
                 </div>
                 {canEdit && (
                   <div className="mt-3 space-y-2">
-                    <select
-                      value={r.status}
-                      disabled={updating === r.id}
-                      onChange={(e) => handleStatusChange(r, e.target.value)}
-                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
-                    >
-                      {STATUSES.slice(1).map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        value={r.status}
+                        disabled={updating === r.id}
+                        onChange={(e) => handleStatusChange(r, e.target.value)}
+                        className="flex-1 border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                      >
+                        {STATUSES.slice(1).map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="text-xs px-2 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 whitespace-nowrap"
+                      >
+                        Edit
+                      </button>
+                    </div>
                     {r.laptopIdNumber && (r.status === 'Fixed' || r.status === 'Returned') && r.status !== 'Returned' && (
                       <button
                         onClick={() => { setRedeploying(r.id); setRedeployError(null) }}
@@ -337,16 +394,24 @@ export default function RepairDashboard() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex flex-col gap-1">
                         {canEdit && (
-                          <select
-                            value={r.status}
-                            disabled={updating === r.id}
-                            onChange={(e) => handleStatusChange(r, e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
-                          >
-                            {STATUSES.slice(1).map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
+                          <div className="flex gap-1">
+                            <select
+                              value={r.status}
+                              disabled={updating === r.id}
+                              onChange={(e) => handleStatusChange(r, e.target.value)}
+                              className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+                            >
+                              {STATUSES.slice(1).map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => openEdit(r)}
+                              className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                          </div>
                         )}
                         {canEdit && r.laptopIdNumber && r.status === 'Fixed' && (
                           <button
@@ -402,6 +467,108 @@ export default function RepairDashboard() {
           <Pagination page={page} total={filtered.length} perPage={PER_PAGE} onChange={setPage} />
         </>
       )}
+
+      {editingRepair && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingRepair(null)}>
+          <form
+            onSubmit={handleEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit Repair</h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <EditField label="Spare Laptop ID">
+                <input type="text" value={editForm.laptopIdNumber}
+                  onChange={(e) => setEditForm((f) => ({ ...f, laptopIdNumber: e.target.value }))}
+                  className={editInput} />
+              </EditField>
+
+              <EditField label="Device / Reference Number" required>
+                <input type="text" value={editForm.referenceNumber}
+                  onChange={(e) => setEditForm((f) => ({ ...f, referenceNumber: e.target.value }))}
+                  required className={editInput} />
+              </EditField>
+
+              <EditField label="Model">
+                <input type="text" value={editForm.model}
+                  onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}
+                  className={editInput} />
+              </EditField>
+
+              <EditField label="Date Received">
+                <input type="date" value={editForm.dateReceived}
+                  onChange={(e) => setEditForm((f) => ({ ...f, dateReceived: e.target.value }))}
+                  className={editInput} />
+              </EditField>
+
+              <EditField label="School Name" required>
+                <input type="text" list="edit-school-list" value={editForm.schoolName}
+                  onChange={(e) => setEditForm((f) => ({ ...f, schoolName: e.target.value }))}
+                  required className={editInput} />
+                <datalist id="edit-school-list">
+                  {schools.map((s) => <option key={s} value={s} />)}
+                </datalist>
+              </EditField>
+
+              <EditField label="Received By">
+                <input type="text" value={editForm.receivedBy}
+                  onChange={(e) => setEditForm((f) => ({ ...f, receivedBy: e.target.value }))}
+                  className={editInput} />
+              </EditField>
+
+              <EditField label="Assign Technician">
+                <input type="text" list="edit-technician-list" value={editForm.technician}
+                  onChange={(e) => setEditForm((f) => ({ ...f, technician: e.target.value }))}
+                  className={editInput} />
+                <datalist id="edit-technician-list">
+                  {technicians.map((t) => <option key={t} value={t} />)}
+                </datalist>
+              </EditField>
+            </div>
+
+            <EditField label="Problem Identified" required>
+              <input type="text" value={editForm.problemIdentified}
+                onChange={(e) => setEditForm((f) => ({ ...f, problemIdentified: e.target.value }))}
+                required className={editInput} />
+            </EditField>
+
+            <EditField label="Remarks / Notes">
+              <textarea value={editForm.remarks} rows={3}
+                onChange={(e) => setEditForm((f) => ({ ...f, remarks: e.target.value }))}
+                className={editInput} />
+            </EditField>
+
+            {editError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{editError}</div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={editSaving}
+                className="bg-blue-700 text-white px-6 py-2 rounded font-medium hover:bg-blue-800 disabled:opacity-60 transition">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingRepair(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const editInput = 'w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400'
+
+function EditField({ label, required, children }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-sm font-medium text-gray-700">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {children}
     </div>
   )
 }

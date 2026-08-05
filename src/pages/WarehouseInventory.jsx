@@ -28,6 +28,10 @@ export default function WarehouseInventory() {
   const [outError, setOutError] = useState(null)
   const [schools, setSchools] = useState([])
   const [expandedBoxes, setExpandedBoxes] = useState(new Set())
+  const [editingItem, setEditingItem] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
@@ -99,6 +103,36 @@ export default function WarehouseInventory() {
 
   const setField = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
   const setOut = (f) => (e) => setOutForm((p) => ({ ...p, [f]: e.target.value }))
+
+  function openEdit(item) {
+    setEditingItem(item)
+    setEditError(null)
+    setEditForm({
+      boxName: item.boxName || '',
+      item: item.item || '',
+      quantity: item.quantity ?? '',
+      description: item.description || '',
+    })
+  }
+
+  async function handleEditSave(e) {
+    e.preventDefault()
+    if (!editForm.boxName.trim() || !editForm.item.trim()) {
+      setEditError('Box Name and Equipment/Item are required.')
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await updateInventoryItem({ id: editingItem.id, ...editForm })
+      setItems((prev) => prev.map((i) => (i.id === editingItem.id ? { ...i, ...editForm } : i)))
+      setEditingItem(null)
+    } catch (err) {
+      setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   function toggleBox(boxName) {
     setExpandedBoxes((prev) => {
@@ -304,12 +338,20 @@ export default function WarehouseInventory() {
                         <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={item.description}>{item.description || '—'}</td>
                         <td className="px-3 py-2">
                           {canEdit && (
-                            <button
-                              onClick={() => { setTakingOut(item); setOutForm(emptyOut); setOutError(null) }}
-                              className="text-xs bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
-                            >
-                              Take out
-                            </button>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => { setTakingOut(item); setOutForm(emptyOut); setOutError(null) }}
+                                className="text-xs bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded hover:bg-amber-100 whitespace-nowrap font-medium"
+                              >
+                                Take out
+                              </button>
+                              <button
+                                onClick={() => openEdit(item)}
+                                className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 whitespace-nowrap"
+                              >
+                                Edit
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -407,6 +449,52 @@ export default function WarehouseInventory() {
         </div>
         <Pagination page={historyPage} total={filteredHistory.length} perPage={PER_PAGE} onChange={setHistoryPage} />
         </>
+      )}
+
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingItem(null)}>
+          <form
+            onSubmit={handleEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit Item</h2>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['boxName', 'Box Name', 'text', true],
+                ['item', 'Equipment / Item', 'text', true],
+                ['quantity', 'Quantity', 'number', false],
+                ['description', 'Description', 'text', false],
+              ].map(([field, label, type, required]) => (
+                <div key={field} className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">
+                    {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                  </label>
+                  <input
+                    type={type}
+                    value={editForm[field]}
+                    onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
+                    required={required}
+                    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              ))}
+            </div>
+            {editError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{editError}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={editSaving}
+                className="bg-blue-700 text-white px-6 py-2 rounded font-medium hover:bg-blue-800 disabled:opacity-60 transition">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingItem(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   )

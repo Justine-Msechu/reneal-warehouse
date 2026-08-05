@@ -28,6 +28,10 @@ export default function Schools() {
   const [saving, setSaving] = useState(false)
   const [deactivating, setDeactivating] = useState(null) // school being deactivated
   const [deactivateReason, setDeactivateReason] = useState('')
+  const [editingSchool, setEditingSchool] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
@@ -102,6 +106,35 @@ export default function Schools() {
   }
 
   const set = (f) => (e) => setForm((prev) => ({ ...prev, [f]: e.target.value }))
+
+  function openEdit(school) {
+    setEditingSchool(school)
+    setEditError(null)
+    setEditForm({
+      name: school.name || '',
+      district: school.district || '',
+      region: school.region || '',
+      laptopCount: school.laptopCount ?? '',
+      activatedDate: school.activatedDate || '',
+      notes: school.notes || '',
+    })
+  }
+
+  async function handleEditSave(e) {
+    e.preventDefault()
+    if (!editForm.name.trim()) { setEditError('School Name is required.'); return }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await updateSchool({ id: editingSchool.id, ...editForm })
+      setSchools((prev) => prev.map((s) => (s.id === editingSchool.id ? { ...s, ...editForm } : s)))
+      setEditingSchool(null)
+    } catch (err) {
+      setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const regions = ['All', ...new Set(schools.map((s) => s.region).filter(Boolean)).values()].sort((a, b) => a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b))
 
@@ -282,6 +315,11 @@ export default function Schools() {
                 >
                   View repairs →
                 </button>
+                {canEdit && (
+                  <button onClick={() => openEdit(school)} className="text-gray-500 hover:underline font-medium">
+                    Edit
+                  </button>
+                )}
                 {canEdit && (school.status === 'Active' ? (
                   <button
                     onClick={() => { setDeactivating(school); setDeactivateReason('') }}
@@ -326,6 +364,62 @@ export default function Schools() {
         </div>
         <Pagination page={page} total={filtered.length} perPage={PER_PAGE} onChange={setPage} />
         </>
+      )}
+
+      {editingSchool && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingSchool(null)}>
+          <form
+            onSubmit={handleEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit School</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                ['name', 'School Name', 'text', true],
+                ['district', 'District', 'text', false],
+                ['region', 'Region', 'text', false],
+                ['laptopCount', 'Number of Laptops', 'number', false],
+                ['activatedDate', 'Date Activated', 'date', false],
+              ].map(([field, label, type, required]) => (
+                <div key={field} className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                  </label>
+                  <input
+                    type={type}
+                    value={editForm[field]}
+                    onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
+                    required={required}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">Notes</label>
+              <input
+                type="text"
+                value={editForm.notes}
+                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            {editError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{editError}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={editSaving}
+                className="bg-blue-700 text-white px-6 py-2 rounded font-medium hover:bg-blue-800 disabled:opacity-60 transition">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingSchool(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   )

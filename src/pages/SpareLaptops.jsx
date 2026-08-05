@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { getSpareLaptops, addSpareLaptop, getDeployments, logDeployment, getSchools, addRepair } from '../services/api'
+import { getSpareLaptops, addSpareLaptop, updateSpareLaptop, getDeployments, logDeployment, getSchools, addRepair } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -36,6 +36,10 @@ export default function SpareLaptops() {
   const [deployForm, setDeployForm] = useState(emptyDeploy)
   const [deployError, setDeployError] = useState(null)
   const [schools, setSchools] = useState([])
+  const [editingLaptop, setEditingLaptop] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
   const [page, setPage] = useState(1)
@@ -131,6 +135,39 @@ export default function SpareLaptops() {
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
   const setDep = (f) => (e) => setDeployForm((p) => ({ ...p, [f]: e.target.value }))
+
+  function openEdit(laptop) {
+    setEditingLaptop(laptop)
+    setEditError(null)
+    setEditForm({
+      idNumber: laptop.idNumber || '',
+      manufacturer: laptop.manufacturer || '',
+      model: laptop.model || '',
+      cpu: laptop.cpu || '',
+      cpuClass: laptop.cpuClass || '',
+      memHd: laptop.memHd || '',
+      location: laptop.location || '',
+      donor: laptop.donor || '',
+      date: laptop.date || '',
+      comments: laptop.comments || '',
+    })
+  }
+
+  async function handleEditSave(e) {
+    e.preventDefault()
+    if (!editForm.idNumber.trim()) { setEditError('ID Number is required.'); return }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await updateSpareLaptop({ id: editingLaptop.id, ...editForm })
+      setLaptops((prev) => prev.map((l) => (l.id === editingLaptop.id ? { ...l, ...editForm } : l)))
+      setEditingLaptop(null)
+    } catch (err) {
+      setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const isInWarehouse = (l) => !l.location || l.location.toLowerCase().includes('spare') ||
     l.location.toLowerCase().includes('warehouse') || l.location.toLowerCase().includes('box')
@@ -339,20 +376,30 @@ export default function SpareLaptops() {
                     </td>
                     <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={l.comments}>{l.comments || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      {canEdit && <button
-                        onClick={() => {
-                          setDeploying(l)
-                          setDeployForm({ ...emptyDeploy, action: isInWarehouse(l) ? 'Deployed' : 'Returned' })
-                          setDeployError(null)
-                        }}
-                        className={`text-xs px-2 py-1 rounded font-medium border ${
-                          isInWarehouse(l)
-                            ? 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100'
-                            : 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
-                        }`}
-                      >
-                        {isInWarehouse(l) ? 'Deploy →' : '← Return'}
-                      </button>}
+                      {canEdit && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              setDeploying(l)
+                              setDeployForm({ ...emptyDeploy, action: isInWarehouse(l) ? 'Deployed' : 'Returned' })
+                              setDeployError(null)
+                            }}
+                            className={`text-xs px-2 py-1 rounded font-medium border ${
+                              isInWarehouse(l)
+                                ? 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100'
+                                : 'bg-green-50 border-green-300 text-green-700 hover:bg-green-100'
+                            }`}
+                          >
+                            {isInWarehouse(l) ? 'Deploy →' : '← Return'}
+                          </button>
+                          <button
+                            onClick={() => openEdit(l)}
+                            className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
 
@@ -479,6 +526,66 @@ export default function SpareLaptops() {
         </div>
         <Pagination page={historyPage} total={filteredHistory.length} perPage={PER_PAGE} onChange={setHistoryPage} />
         </>
+      )}
+
+      {editingLaptop && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingLaptop(null)}>
+          <form
+            onSubmit={handleEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit Spare Laptop</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                ['idNumber', 'ID Number', true],
+                ['manufacturer', 'Manufacturer', false],
+                ['model', 'Model', false],
+                ['cpu', 'CPU', false],
+                ['cpuClass', 'CPU Class', false],
+                ['memHd', 'Mem/HD', false],
+                ['location', 'Location / Box', false],
+                ['donor', 'Donor', false],
+                ['date', 'Batch', false],
+              ].map(([field, label, required]) => (
+                <div key={field} className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">
+                    {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm[field]}
+                    onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
+                    required={required}
+                    className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Comments / Known Issues</label>
+              <input
+                type="text"
+                value={editForm.comments}
+                onChange={(e) => setEditForm((f) => ({ ...f, comments: e.target.value }))}
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            {editError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{editError}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={editSaving}
+                className="bg-blue-700 text-white px-6 py-2 rounded font-medium hover:bg-blue-800 disabled:opacity-60 transition">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingLaptop(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   )
