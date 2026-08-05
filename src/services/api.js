@@ -122,10 +122,12 @@ export const updateSchool = (data) => { bust('schools'); return post({ action: '
 // ── Withdrawals ───────────────────────────────────────────────
 export const getWithdrawals = () => cachedGet('withdrawals', { action: 'getWithdrawals' })
 export const logWithdrawal = (data) => { bust('withdrawals', 'inventory'); return post({ action: 'logWithdrawal', ...data }) }
+export const updateWithdrawal = (data) => { bust('withdrawals'); return post({ action: 'updateWithdrawal', ...data }) }
 
 // ── Deployments ───────────────────────────────────────────────
 export const getDeployments = () => cachedGet('deployments', { action: 'getDeployments' })
 export const logDeployment = (data) => { bust('deployments', 'laptops'); return post({ action: 'logDeployment', ...data }) }
+export const updateDeployment = (data) => { bust('deployments'); return post({ action: 'updateDeployment', ...data }) }
 
 // ── Users ─────────────────────────────────────────────────────
 // getUser is called at login before the token is in sessionStorage, so we pass it explicitly

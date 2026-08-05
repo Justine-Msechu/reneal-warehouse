@@ -11,6 +11,10 @@ export default function UserManagement() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editError, setEditError] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -45,6 +49,27 @@ export default function UserManagement() {
   }
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
+
+  function openEdit(u) {
+    setEditingUser(u)
+    setEditError(null)
+    setEditForm({ name: u.name || '', role: u.role || 'viewer' })
+  }
+
+  async function handleEditSave(e) {
+    e.preventDefault()
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      await addUser({ email: editingUser.email, ...editForm })
+      setUsers((prev) => prev.map((u) => (u.email === editingUser.email ? { ...u, ...editForm } : u)))
+      setEditingUser(null)
+    } catch (err) {
+      setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const roleColor = { admin: 'bg-purple-100 text-purple-700', technician: 'bg-blue-100 text-blue-700', viewer: 'bg-gray-100 text-gray-600' }
 
@@ -124,15 +149,65 @@ export default function UserManagement() {
                   </td>
                   <td className="px-3 py-2 text-gray-400 text-xs whitespace-nowrap">{u.addedDate}</td>
                   <td className="px-3 py-2">
-                    <button onClick={() => handleRemove(u)}
-                      className="text-xs text-red-500 hover:underline font-medium">
-                      Remove
-                    </button>
+                    <div className="flex gap-3">
+                      <button onClick={() => openEdit(u)}
+                        className="text-xs text-gray-500 hover:underline font-medium">
+                        Edit
+                      </button>
+                      <button onClick={() => handleRemove(u)}
+                        className="text-xs text-red-500 hover:underline font-medium">
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingUser(null)}>
+          <form
+            onSubmit={handleEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-sm w-full p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit User</h2>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Gmail Address</label>
+              <input type="email" value={editingUser.email} disabled
+                className="border border-gray-200 bg-gray-50 rounded px-2 py-1.5 text-sm text-gray-500" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Full Name</label>
+              <input type="text" value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Role</label>
+              <select value={editForm.role}
+                onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
+                className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                {ROLES.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              </select>
+            </div>
+            {editError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{editError}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={editSaving}
+                className="bg-blue-700 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingUser(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

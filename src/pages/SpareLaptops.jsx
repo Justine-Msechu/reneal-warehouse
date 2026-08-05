@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { getSpareLaptops, addSpareLaptop, updateSpareLaptop, getDeployments, logDeployment, getSchools, addRepair } from '../services/api'
+import { getSpareLaptops, addSpareLaptop, updateSpareLaptop, getDeployments, logDeployment, updateDeployment, getSchools, addRepair } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -40,6 +40,10 @@ export default function SpareLaptops() {
   const [editForm, setEditForm] = useState({})
   const [editError, setEditError] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [editingDeployment, setEditingDeployment] = useState(null)
+  const [depEditForm, setDepEditForm] = useState({})
+  const [depEditError, setDepEditError] = useState(null)
+  const [depEditSaving, setDepEditSaving] = useState(false)
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
   const [page, setPage] = useState(1)
@@ -166,6 +170,35 @@ export default function SpareLaptops() {
       setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  function openDeploymentEdit(d) {
+    setEditingDeployment(d)
+    setDepEditError(null)
+    setDepEditForm({
+      date: d.date || '',
+      idNumber: d.idNumber || '',
+      action: d.action || 'Deployed',
+      school: d.school || '',
+      takenBy: d.takenBy || '',
+      notes: d.notes || '',
+    })
+  }
+
+  async function handleDeploymentEditSave(e) {
+    e.preventDefault()
+    if (!depEditForm.takenBy.trim()) { setDepEditError('Handled by is required.'); return }
+    setDepEditSaving(true)
+    setDepEditError(null)
+    try {
+      await updateDeployment({ id: editingDeployment.id, ...depEditForm })
+      setDeployments((prev) => prev.map((d) => (d.id === editingDeployment.id ? { ...d, ...depEditForm } : d)))
+      setEditingDeployment(null)
+    } catch (err) {
+      setDepEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setDepEditSaving(false)
     }
   }
 
@@ -497,14 +530,14 @@ export default function SpareLaptops() {
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Date', 'Laptop ID', 'Action', 'School', 'Handled By', 'Notes'].map((h) => (
+                {['Date', 'Laptop ID', 'Action', 'School', 'Handled By', 'Notes', ''].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visibleHistory.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-8 text-gray-400">No deployments recorded yet.</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400">No deployments recorded yet.</td></tr>
               ) : visibleHistory.map((d, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{d.date}</td>
@@ -519,6 +552,14 @@ export default function SpareLaptops() {
                   <td className="px-3 py-2">{d.school || '—'}</td>
                   <td className="px-3 py-2">{d.takenBy}</td>
                   <td className="px-3 py-2 text-gray-400 text-xs">{d.notes || '—'}</td>
+                  <td className="px-3 py-2">
+                    {canEdit && d.id && (
+                      <button onClick={() => openDeploymentEdit(d)}
+                        className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+                        Edit
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -581,6 +622,72 @@ export default function SpareLaptops() {
               </button>
               <button type="button" onClick={() => setEditingLaptop(null)}
                 className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editingDeployment && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingDeployment(null)}>
+          <form
+            onSubmit={handleDeploymentEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-md w-full p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit Deployment Log Entry</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">Date</label>
+                <input type="date" value={depEditForm.date}
+                  onChange={(e) => setDepEditForm((f) => ({ ...f, date: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">Laptop ID</label>
+                <input type="text" value={depEditForm.idNumber}
+                  onChange={(e) => setDepEditForm((f) => ({ ...f, idNumber: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">Action</label>
+                <select value={depEditForm.action}
+                  onChange={(e) => setDepEditForm((f) => ({ ...f, action: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  <option>Deployed</option>
+                  <option>Returned</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">School</label>
+                <input type="text" value={depEditForm.school}
+                  onChange={(e) => setDepEditForm((f) => ({ ...f, school: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="flex flex-col gap-1 col-span-2">
+                <label className="text-xs font-medium text-gray-600">Handled By <span className="text-red-500">*</span></label>
+                <input type="text" value={depEditForm.takenBy} required
+                  onChange={(e) => setDepEditForm((f) => ({ ...f, takenBy: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Notes</label>
+              <input type="text" value={depEditForm.notes}
+                onChange={(e) => setDepEditForm((f) => ({ ...f, notes: e.target.value }))}
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            {depEditError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{depEditError}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={depEditSaving}
+                className="bg-blue-700 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                {depEditSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingDeployment(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                 Cancel
               </button>
             </div>

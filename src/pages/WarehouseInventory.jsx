@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { getInventory, addInventoryItem, updateInventoryItem, getWithdrawals, logWithdrawal, getSchools } from '../services/api'
+import { getInventory, addInventoryItem, updateInventoryItem, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -32,6 +32,10 @@ export default function WarehouseInventory() {
   const [editForm, setEditForm] = useState({})
   const [editError, setEditError] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [editingWithdrawal, setEditingWithdrawal] = useState(null)
+  const [wEditForm, setWEditForm] = useState({})
+  const [wEditError, setWEditError] = useState(null)
+  const [wEditSaving, setWEditSaving] = useState(false)
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
@@ -131,6 +135,33 @@ export default function WarehouseInventory() {
       setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  function openWithdrawalEdit(w) {
+    setEditingWithdrawal(w)
+    setWEditError(null)
+    setWEditForm({
+      date: w.date || '',
+      takenBy: w.takenBy || '',
+      destination: w.destination || '',
+      notes: w.notes || '',
+    })
+  }
+
+  async function handleWithdrawalEditSave(e) {
+    e.preventDefault()
+    if (!wEditForm.takenBy.trim()) { setWEditError('Taken by is required.'); return }
+    setWEditSaving(true)
+    setWEditError(null)
+    try {
+      await updateWithdrawal({ id: editingWithdrawal.id, ...wEditForm })
+      setWithdrawals((prev) => prev.map((w) => (w.id === editingWithdrawal.id ? { ...w, ...wEditForm } : w)))
+      setEditingWithdrawal(null)
+    } catch (err) {
+      setWEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
+    } finally {
+      setWEditSaving(false)
     }
   }
 
@@ -424,14 +455,14 @@ export default function WarehouseInventory() {
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Date', 'Box', 'Item', 'Qty Out', 'Remaining', 'Taken By', 'Destination', 'Notes'].map((h) => (
+                {['Date', 'Box', 'Item', 'Qty Out', 'Remaining', 'Taken By', 'Destination', 'Notes', ''].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visibleHistory.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-8 text-gray-400">No withdrawals recorded yet.</td></tr>
+                <tr><td colSpan={9} className="text-center py-8 text-gray-400">No withdrawals recorded yet.</td></tr>
               ) : visibleHistory.map((w, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{w.date}</td>
@@ -442,6 +473,14 @@ export default function WarehouseInventory() {
                   <td className="px-3 py-2">{w.takenBy}</td>
                   <td className="px-3 py-2 text-gray-600">{w.destination || '—'}</td>
                   <td className="px-3 py-2 text-gray-400 text-xs max-w-xs truncate">{w.notes || '—'}</td>
+                  <td className="px-3 py-2">
+                    {canEdit && w.id && (
+                      <button onClick={() => openWithdrawalEdit(w)}
+                        className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+                        Edit
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -490,6 +529,60 @@ export default function WarehouseInventory() {
               </button>
               <button type="button" onClick={() => setEditingItem(null)}
                 className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {editingWithdrawal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={() => setEditingWithdrawal(null)}>
+          <form
+            onSubmit={handleWithdrawalEditSave}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-lg max-w-md w-full p-6 space-y-4"
+          >
+            <h2 className="text-lg font-bold text-gray-800">Edit Withdrawal Log Entry</h2>
+            <p className="text-xs text-gray-500">
+              Quantity can't be changed here — it's tied to the current stock count. To fix a wrong quantity, adjust the item's stock directly instead.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">Date</label>
+                <input type="date" value={wEditForm.date}
+                  onChange={(e) => setWEditForm((f) => ({ ...f, date: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">Taken By <span className="text-red-500">*</span></label>
+                <input type="text" value={wEditForm.takenBy} required
+                  onChange={(e) => setWEditForm((f) => ({ ...f, takenBy: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+              <div className="flex flex-col gap-1 col-span-2">
+                <label className="text-xs font-medium text-gray-600">Destination / School</label>
+                <input type="text" value={wEditForm.destination}
+                  onChange={(e) => setWEditForm((f) => ({ ...f, destination: e.target.value }))}
+                  className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">Notes</label>
+              <input type="text" value={wEditForm.notes}
+                onChange={(e) => setWEditForm((f) => ({ ...f, notes: e.target.value }))}
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+            {wEditError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded text-sm">{wEditError}</div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="submit" disabled={wEditSaving}
+                className="bg-amber-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-amber-700 disabled:opacity-60">
+                {wEditSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" onClick={() => setEditingWithdrawal(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
                 Cancel
               </button>
             </div>
