@@ -74,12 +74,13 @@ export default function RepairDashboard() {
   async function handleStatusChange(repair, newStatus) {
     setUpdating(repair.id)
     try {
-      await updateRepair({ id: repair.id, status: newStatus })
+      const res = await updateRepair({ id: repair.id, status: newStatus })
+      if (res.error) { alert(`Failed to update status: ${res.error}`); return }
       setRepairs((prev) =>
         prev.map((r) => (r.id === repair.id ? { ...r, status: newStatus } : r))
       )
-    } catch {
-      alert('Failed to update status.')
+    } catch (err) {
+      alert(`Failed to update status: ${err.message}`)
     } finally {
       setUpdating(null)
     }
@@ -96,7 +97,7 @@ export default function RepairDashboard() {
         setRedeployError(`Laptop ${repair.laptopIdNumber} not found in Spare Laptops.`)
         return
       }
-      await logDeployment({
+      const depRes = await logDeployment({
         laptopId: laptop.id,
         idNumber: laptop.idNumber,
         action: 'Deployed',
@@ -105,19 +106,21 @@ export default function RepairDashboard() {
         date: redeployForm.date,
         notes: `Returned to school after repair (Ref: ${repair.referenceNumber})`,
       })
-      await updateRepair({
+      if (depRes.error) { setRedeployError(depRes.error); return }
+      const repRes = await updateRepair({
         id: repair.id,
         status: 'Returned',
         dateReturnedToSchool: redeployForm.date,
         pickedUpBy: redeployForm.takenBy,
       })
+      if (repRes.error) { setRedeployError(repRes.error); return }
       setRepairs((prev) => prev.map((r) =>
         r.id === repair.id ? { ...r, status: 'Returned', dateReturnedToSchool: redeployForm.date } : r
       ))
       setRedeploying(null)
       setRedeployForm({ takenBy: '', date: new Date().toISOString().slice(0, 10) })
-    } catch {
-      setRedeployError('Failed to re-deploy. Try again.')
+    } catch (err) {
+      setRedeployError(`Failed to re-deploy: ${err.message}`)
     } finally {
       setRedeployLoading(false)
     }
@@ -148,7 +151,8 @@ export default function RepairDashboard() {
     setEditSaving(true)
     setEditError(null)
     try {
-      await updateRepair({ id: editingRepair.id, ...editForm })
+      const res = await updateRepair({ id: editingRepair.id, ...editForm })
+      if (res.error) { setEditError(res.error); return }
       setRepairs((prev) => prev.map((r) => (r.id === editingRepair.id ? { ...r, ...editForm } : r)))
       setEditingRepair(null)
     } catch (err) {
