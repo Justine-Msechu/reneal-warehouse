@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { getInventory, addInventoryItem, updateInventoryItem, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools } from '../services/api'
+import { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, deleteInventoryBox, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -165,6 +165,26 @@ export default function WarehouseInventory() {
       setEditError(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to save: ${err.message}`)
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  async function handleDeleteItem(item) {
+    if (!confirm(`Delete "${item.item}" from ${item.boxName}? This cannot be undone.`)) return
+    try {
+      await deleteInventoryItem(item.id)
+      setItems((prev) => prev.filter((i) => i.id !== item.id))
+    } catch (err) {
+      alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to delete: ${err.message}`)
+    }
+  }
+
+  async function handleDeleteBox(boxName, count) {
+    if (!confirm(`Delete box "${boxName}" and all ${count} item(s) in it? This cannot be undone.`)) return
+    try {
+      await deleteInventoryBox(boxName)
+      setItems((prev) => prev.filter((i) => i.boxName !== boxName))
+    } catch (err) {
+      alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to delete: ${err.message}`)
     }
   }
 
@@ -389,12 +409,20 @@ export default function WarehouseInventory() {
                           <span className="ml-2 font-normal normal-case text-blue-400">({group.boxItems.length})</span>
                         </span>
                         {canEdit && group.boxName !== '(No box)' && (
-                          <button
-                            onClick={() => openQuickAdd(group.boxName)}
-                            className="text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap font-medium"
-                          >
-                            + Item
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => openQuickAdd(group.boxName)}
+                              className="text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap font-medium"
+                            >
+                              + Item
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBox(group.boxName, group.boxItems.length)}
+                              className="text-xs bg-white border border-red-300 text-red-600 px-2 py-1 rounded hover:bg-red-50 whitespace-nowrap font-medium"
+                            >
+                              Delete box
+                            </button>
+                          </div>
                         )}
                       </div>
                     </td>
@@ -461,6 +489,12 @@ export default function WarehouseInventory() {
                                 className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 whitespace-nowrap"
                               >
                                 Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteItem(item)}
+                                className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50 whitespace-nowrap"
+                              >
+                                Delete
                               </button>
                             </div>
                           )}
