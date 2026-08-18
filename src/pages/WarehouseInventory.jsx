@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 const PER_PAGE = 20
 
 const emptyItem = { boxName: '', item: '', quantity: '', description: '' }
+const emptyQuickAdd = { item: '', quantity: '', description: '' }
 const emptyOut = { quantityTaken: '', takenBy: '', destination: '', notes: '', date: new Date().toISOString().slice(0, 10) }
 
 export default function WarehouseInventory() {
@@ -23,6 +24,10 @@ export default function WarehouseInventory() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyItem)
   const [saving, setSaving] = useState(false)
+  const [addingToBox, setAddingToBox] = useState(null) // box name being quick-added to
+  const [quickAddForm, setQuickAddForm] = useState(emptyQuickAdd)
+  const [quickAddError, setQuickAddError] = useState(null)
+  const [quickAddSaving, setQuickAddSaving] = useState(false)
   const [takingOut, setTakingOut] = useState(null) // item being taken out
   const [outForm, setOutForm] = useState(emptyOut)
   const [outError, setOutError] = useState(null)
@@ -71,6 +76,30 @@ export default function WarehouseInventory() {
     }
   }
 
+  function openQuickAdd(boxName) {
+    setAddingToBox((prev) => (prev === boxName ? null : boxName))
+    setQuickAddForm(emptyQuickAdd)
+    setQuickAddError(null)
+    setExpandedBoxes((prev) => new Set(prev).add(boxName))
+  }
+
+  async function handleQuickAdd(e) {
+    e.preventDefault()
+    if (!quickAddForm.item.trim()) { setQuickAddError('Equipment / Item is required.'); return }
+    setQuickAddSaving(true)
+    setQuickAddError(null)
+    try {
+      await addInventoryItem({ boxName: addingToBox, ...quickAddForm })
+      setAddingToBox(null)
+      setQuickAddForm(emptyQuickAdd)
+      fetchAll()
+    } catch {
+      setQuickAddError('Failed to save.')
+    } finally {
+      setQuickAddSaving(false)
+    }
+  }
+
   async function handleTakeOut(e) {
     e.preventDefault()
     setOutError(null)
@@ -107,6 +136,7 @@ export default function WarehouseInventory() {
 
   const setField = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
   const setOut = (f) => (e) => setOutForm((p) => ({ ...p, [f]: e.target.value }))
+  const setQuick = (f) => (e) => setQuickAddForm((p) => ({ ...p, [f]: e.target.value }))
 
   function openEdit(item) {
     setEditingItem(item)
@@ -347,16 +377,66 @@ export default function WarehouseInventory() {
                 <tr><td colSpan={4} className="text-center py-8 text-gray-400">No items found.</td></tr>
               ) : groupedByBox.map((group) => (
                 <Fragment key={group.boxName}>
-                  <tr
-                    className="bg-blue-50 cursor-pointer hover:bg-blue-100 select-none"
-                    onClick={() => toggleBox(group.boxName)}
-                  >
-                    <td colSpan={4} className="px-3 py-1.5 font-bold text-blue-800 text-xs uppercase tracking-wide">
-                      <span className="inline-block w-3">{group.isExpanded ? '▾' : '▸'}</span>
-                      {' '}{group.boxName}
-                      <span className="ml-2 font-normal normal-case text-blue-400">({group.boxItems.length})</span>
+                  <tr className="bg-blue-50 hover:bg-blue-100 select-none">
+                    <td colSpan={4} className="px-3 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className="cursor-pointer font-bold text-blue-800 text-xs uppercase tracking-wide"
+                          onClick={() => toggleBox(group.boxName)}
+                        >
+                          <span className="inline-block w-3">{group.isExpanded ? '▾' : '▸'}</span>
+                          {' '}{group.boxName}
+                          <span className="ml-2 font-normal normal-case text-blue-400">({group.boxItems.length})</span>
+                        </span>
+                        {canEdit && group.boxName !== '(No box)' && (
+                          <button
+                            onClick={() => openQuickAdd(group.boxName)}
+                            className="text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-50 whitespace-nowrap font-medium"
+                          >
+                            + Item
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
+
+                  {/* Inline quick-add-item form, scoped to this box */}
+                  {addingToBox === group.boxName && (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-3 bg-blue-50/60 border-b border-blue-200">
+                        <form onSubmit={handleQuickAdd} className="flex flex-wrap gap-2 items-end">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-gray-600">Equipment / Item <span className="text-red-500">*</span></label>
+                            <input type="text" value={quickAddForm.item} onChange={setQuick('item')}
+                              required placeholder="LAPTOP RAM" autoFocus
+                              className="w-40 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs font-medium text-gray-600">Quantity</label>
+                            <input type="text" value={quickAddForm.quantity} onChange={setQuick('quantity')}
+                              placeholder="11"
+                              className="w-20 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                          </div>
+                          <div className="flex flex-col gap-1 flex-1 min-w-32">
+                            <label className="text-xs font-medium text-gray-600">Description</label>
+                            <input type="text" value={quickAddForm.description} onChange={setQuick('description')}
+                              placeholder="Optional"
+                              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                          </div>
+                          <div className="flex gap-2 items-end pb-0.5">
+                            <button type="submit" disabled={quickAddSaving}
+                              className="bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                              {quickAddSaving ? '...' : 'Add'}
+                            </button>
+                            <button type="button" onClick={() => setAddingToBox(null)}
+                              className="text-gray-400 text-sm hover:underline">Cancel</button>
+                          </div>
+                        </form>
+                        {quickAddError && <p className="mt-2 text-xs text-red-600">{quickAddError}</p>}
+                      </td>
+                    </tr>
+                  )}
+
                   {group.isExpanded && group.boxItems.map((item) => (
                     <Fragment key={item.id}>
                       <tr className="hover:bg-gray-50">
