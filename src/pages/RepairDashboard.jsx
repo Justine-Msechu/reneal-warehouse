@@ -29,6 +29,9 @@ export default function RepairDashboard() {
   const [editSaving, setEditSaving] = useState(false)
   const [schools, setSchools] = useState([])
   const [technicians, setTechnicians] = useState([])
+  const [pickupYear, setPickupYear] = useState('All')
+  const [pickupMonth, setPickupMonth] = useState('All')
+  const [pickupDate, setPickupDate] = useState('') // exact date, overrides year/month when set
   const location = useLocation()
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
@@ -206,9 +209,30 @@ export default function RepairDashboard() {
   // "Fixed" means repaired but not yet picked up/returned to the school —
   // exactly the set that's ready for collection. Independent of whatever
   // search/filter is active on the main table, so Print always means
-  // "everything currently awaiting pickup," most recent first.
-  const readyForPickup = repairs
-    .filter((r) => r.status === 'Fixed')
+  // "everything currently awaiting pickup" (optionally narrowed by
+  // year/month/exact date below), most recent first.
+  const allPickupEligible = repairs.filter((r) => r.status === 'Fixed')
+
+  const pickupYears = ['All', ...new Set(
+    allPickupEligible.map((r) => r.dateRepaired?.slice(0, 4)).filter(Boolean)
+  )].sort((a, b) => (a === 'All' ? -1 : b === 'All' ? 1 : b.localeCompare(a)))
+
+  const pickupAvailableMonths = pickupYear === 'All' ? [] : [
+    ...new Set(
+      allPickupEligible
+        .filter((r) => r.dateRepaired?.startsWith(pickupYear))
+        .map((r) => r.dateRepaired?.slice(5, 7))
+        .filter(Boolean)
+    )
+  ].sort()
+
+  const readyForPickup = allPickupEligible
+    .filter((r) => {
+      if (pickupDate) return r.dateRepaired === pickupDate
+      const matchYear = pickupYear === 'All' || r.dateRepaired?.startsWith(pickupYear)
+      const matchMonth = pickupMonth === 'All' || r.dateRepaired?.slice(5, 7) === pickupMonth
+      return matchYear && matchMonth
+    })
     .sort((a, b) => (b.dateRepaired || '').localeCompare(a.dateRepaired || ''))
 
   return (
@@ -216,7 +240,7 @@ export default function RepairDashboard() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4 no-print">
         <h1 className="text-xl font-bold text-gray-800">Repair Dashboard</h1>
         <div className="flex gap-2">
-          {readyForPickup.length > 0 && (
+          {allPickupEligible.length > 0 && (
             <button
               onClick={() => window.print()}
               className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
@@ -231,6 +255,42 @@ export default function RepairDashboard() {
           )}
         </div>
       </div>
+
+      {allPickupEligible.length > 0 && (
+        <div className="flex flex-wrap items-end gap-2 mb-4 no-print bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <span className="text-xs font-medium text-gray-500 mr-1">Pickup list filter (repaired):</span>
+          <select
+            value={pickupYear}
+            onChange={(e) => { setPickupYear(e.target.value); setPickupMonth('All'); setPickupDate('') }}
+            className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {pickupYears.map((y) => <option key={y}>{y}</option>)}
+          </select>
+          {pickupYear !== 'All' && pickupAvailableMonths.length > 0 && (
+            <select
+              value={pickupMonth}
+              onChange={(e) => { setPickupMonth(e.target.value); setPickupDate('') }}
+              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              <option value="All">All months</option>
+              {pickupAvailableMonths.map((m) => (
+                <option key={m} value={m}>{MONTHS[parseInt(m, 10) - 1]}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={pickupDate}
+              onChange={(e) => { setPickupDate(e.target.value); setPickupYear('All'); setPickupMonth('All') }}
+              className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            {pickupDate && (
+              <button onClick={() => setPickupDate('')} className="text-xs text-gray-400 hover:underline">× clear</button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Print-only pickup list — hidden on screen, shown only when printing
           (see PrintPickupList's <style>) so window.print() doesn't need to
