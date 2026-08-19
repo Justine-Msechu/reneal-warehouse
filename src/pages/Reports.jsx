@@ -5,11 +5,14 @@ import {
 } from 'recharts'
 import { getRepairs, getSpareLaptops, getInventory, getSchools, getWithdrawals, getDeployments } from '../services/api'
 
-const COLORS = ['#1d4ed8', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#be185d']
+// #08448c / #2d8b39 are this app's brand blue/green (from the Reneal logo,
+// see tailwind.config.js) — recharts takes raw color props, not Tailwind
+// classes, so they're repeated here rather than inherited automatically.
+const COLORS = ['#08448c', '#2d8b39', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#be185d']
 const STATUS_COLORS = {
   'Received':     '#d97706',
   'Under Repair': '#2563eb',
-  'Fixed':        '#16a34a',
+  'Fixed':        '#2d8b39',
   'Returned':     '#6b7280',
 }
 
@@ -201,7 +204,7 @@ export default function Reports() {
                   <XAxis dataKey="year" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Bar dataKey="count" name="Repairs" fill="#1d4ed8" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="count" name="Repairs" fill="#08448c" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </Card>
@@ -320,8 +323,8 @@ export default function Reports() {
                   <Pie data={laptopStatus} cx="50%" cy="50%" innerRadius={55} outerRadius={85}
                     dataKey="value" nameKey="name"
                     label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
-                    <Cell fill="#16a34a" />
-                    <Cell fill="#1d4ed8" />
+                    <Cell fill="#2d8b39" />
+                    <Cell fill="#08448c" />
                   </Pie>
                   <Tooltip />
                 </PieChart>
@@ -329,7 +332,7 @@ export default function Reports() {
               <div className="flex justify-center gap-4 mt-2">
                 {laptopStatus.map((s, i) => (
                   <div key={s.name} className="flex items-center gap-1 text-xs">
-                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: i === 0 ? '#16a34a' : '#1d4ed8' }} />
+                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: i === 0 ? '#2d8b39' : '#08448c' }} />
                     {s.name} ({s.value})
                   </div>
                 ))}
