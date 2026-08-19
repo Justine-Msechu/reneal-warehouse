@@ -113,8 +113,9 @@ export const updateSpareLaptop = (data) => { bust('laptops'); return post({ acti
 export const getInventory = () => cachedGet('inventory', { action: 'getInventory' })
 export const addInventoryItem = (data) => { bust('inventory'); return post({ action: 'addInventoryItem', ...data }) }
 export const updateInventoryItem = (data) => { bust('inventory'); return post({ action: 'updateInventoryItem', ...data }) }
-export const deleteInventoryItem = (id) => { bust('inventory'); return post({ action: 'deleteInventoryItem', id }) }
-export const deleteInventoryBox = (boxName) => { bust('inventory'); return post({ action: 'deleteInventoryBox', boxName }) }
+export const deleteInventoryItem = (id) => { bust('inventory', 'deletedLog'); return post({ action: 'deleteInventoryItem', id }) }
+export const deleteInventoryBox = (boxName) => { bust('inventory', 'deletedLog'); return post({ action: 'deleteInventoryBox', boxName }) }
+export const getDeletedLog = () => cachedGet('deletedLog', { action: 'getDeletedLog' })
 
 // ── Schools ───────────────────────────────────────────────────
 export const getSchools = () => cachedGet('schools', { action: 'getSchools' })

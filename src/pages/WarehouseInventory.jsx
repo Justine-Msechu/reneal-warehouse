@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, deleteInventoryBox, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools } from '../services/api'
+import { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, deleteInventoryBox, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools, getDeletedLog } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -41,6 +41,9 @@ export default function WarehouseInventory() {
   const [wEditForm, setWEditForm] = useState({})
   const [wEditError, setWEditError] = useState(null)
   const [wEditSaving, setWEditSaving] = useState(false)
+  const [deletedLog, setDeletedLog] = useState([])
+  const [deletedLogLoaded, setDeletedLogLoaded] = useState(false)
+  const [deletedLogPage, setDeletedLogPage] = useState(1)
   const { user } = useAuth()
   const canEdit = user?.role === 'admin' || user?.role === 'technician'
 
@@ -168,11 +171,25 @@ export default function WarehouseInventory() {
     }
   }
 
+  async function loadDeletedLog() {
+    try {
+      const data = await getDeletedLog()
+      setDeletedLog(data.log || [])
+      setDeletedLogLoaded(true)
+    } catch {}
+  }
+
+  function openTab(key) {
+    setTab(key)
+    if (key === 'deletedLog' && !deletedLogLoaded) loadDeletedLog()
+  }
+
   async function handleDeleteItem(item) {
     if (!confirm(`Delete "${item.item}" from ${item.boxName}? This cannot be undone.`)) return
     try {
       await deleteInventoryItem(item.id)
       setItems((prev) => prev.filter((i) => i.id !== item.id))
+      if (deletedLogLoaded) loadDeletedLog()
     } catch (err) {
       alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to delete: ${err.message}`)
     }
@@ -183,6 +200,7 @@ export default function WarehouseInventory() {
     try {
       await deleteInventoryBox(boxName)
       setItems((prev) => prev.filter((i) => i.boxName !== boxName))
+      if (deletedLogLoaded) loadDeletedLog()
     } catch (err) {
       alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to delete: ${err.message}`)
     }
@@ -278,6 +296,8 @@ export default function WarehouseInventory() {
   })
   const visibleHistory = filteredHistory.slice((historyPage - 1) * PER_PAGE, historyPage * PER_PAGE)
 
+  const visibleDeletedLog = deletedLog.slice((deletedLogPage - 1) * PER_PAGE, deletedLogPage * PER_PAGE)
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -323,10 +343,14 @@ export default function WarehouseInventory() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {[['inventory', 'Stock'], ['history', 'Withdrawal History']].map(([key, label]) => (
+        {[
+          ['inventory', 'Stock'],
+          ['history', 'Withdrawal History'],
+          ...(canEdit ? [['deletedLog', 'Deleted Log']] : []),
+        ].map(([key, label]) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => openTab(key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition ${
               tab === key ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
@@ -340,6 +364,7 @@ export default function WarehouseInventory() {
       </div>
 
       {/* Search + box filter */}
+      {tab !== 'deletedLog' && (
       <div className="flex flex-wrap gap-2 mb-4">
         <input
           type="text"
@@ -374,6 +399,7 @@ export default function WarehouseInventory() {
           </>
         )}
       </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading...</div>
@@ -561,7 +587,7 @@ export default function WarehouseInventory() {
         <Pagination page={page} total={filtered.length} perPage={PER_PAGE} onChange={setPage} />
         </>
 
-      ) : (
+      ) : tab === 'history' ? (
 
         /* ── WITHDRAWAL HISTORY ── */
         <>
@@ -601,6 +627,43 @@ export default function WarehouseInventory() {
           </table>
         </div>
         <Pagination page={historyPage} total={filteredHistory.length} perPage={PER_PAGE} onChange={setHistoryPage} />
+        </>
+
+      ) : (
+
+        /* ── DELETED LOG ── */
+        <>
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full text-sm bg-white">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['When', 'Deleted By', 'Type', 'Box', 'Item', 'Qty', 'Description'].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visibleDeletedLog.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400">Nothing deleted yet.</td></tr>
+              ) : visibleDeletedLog.map((d, i) => (
+                <tr key={d.id || i} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{d.timestamp}</td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">{d.deletedBy}</td>
+                  <td className="px-3 py-2 text-xs">
+                    <span className={`px-1.5 py-0.5 rounded-full font-medium ${d.type === 'box' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'}`}>
+                      {d.type === 'box' ? 'Whole box' : 'Item'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-blue-700 font-semibold whitespace-nowrap">{d.boxName}</td>
+                  <td className="px-3 py-2">{d.item}</td>
+                  <td className="px-3 py-2 text-gray-600">{d.quantity}</td>
+                  <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={d.description}>{d.description || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={deletedLogPage} total={deletedLog.length} perPage={PER_PAGE} onChange={setDeletedLogPage} />
         </>
       )}
 
