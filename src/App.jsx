@@ -26,7 +26,9 @@ function PageLoading() {
 }
 
 function AppRoutes() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+
+  if (loading) return <PageLoading />
 
   if (!user) {
     return (

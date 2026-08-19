@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from 'react'
-import { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, deleteInventoryBox, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools, getDeletedLog } from '../services/api'
+import { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, restoreInventoryItem, deleteInventoryBox, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools, getDeletedLog } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -185,11 +185,13 @@ export default function WarehouseInventory() {
   }
 
   async function handleRestore(d) {
+    if (!d.itemId) { alert('This entry predates the restore feature and can\'t be restored automatically — re-add it manually.'); return }
     if (!confirm(`Restore "${d.item}" (qty ${d.quantity}) into box "${d.boxName}"?`)) return
     try {
-      const res = await addInventoryItem({ boxName: d.boxName, item: d.item, quantity: d.quantity, description: d.description })
+      const res = await restoreInventoryItem(d.itemId)
       if (res.error) { alert(res.error); return }
-      setItems((prev) => [...prev, { id: res.id, boxName: d.boxName, item: d.item, quantity: d.quantity, description: d.description }])
+      if (!res.restored) { alert('Already restored.'); return }
+      fetchAll()
     } catch (err) {
       alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to restore: ${err.message}`)
     }
@@ -206,11 +208,11 @@ export default function WarehouseInventory() {
     }
   }
 
-  async function handleDeleteBox(boxName, count) {
+  async function handleDeleteBox(boxId, boxName, count) {
     if (!confirm(`Delete box "${boxName}" and all ${count} item(s) in it? This cannot be undone.`)) return
     try {
-      await deleteInventoryBox(boxName)
-      setItems((prev) => prev.filter((i) => i.boxName !== boxName))
+      await deleteInventoryBox(boxId)
+      setItems((prev) => prev.filter((i) => i.boxId !== boxId))
       if (deletedLogLoaded) loadDeletedLog()
     } catch (err) {
       alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to delete: ${err.message}`)
@@ -278,6 +280,7 @@ export default function WarehouseInventory() {
     })
     return [...map.entries()].map(([boxName, boxItems]) => ({
       boxName,
+      boxId: boxItems[0]?.boxId,
       boxItems,
       isExpanded: autoExpand || expandedBoxes.has(boxName),
     }))
@@ -454,7 +457,7 @@ export default function WarehouseInventory() {
                               + Item
                             </button>
                             <button
-                              onClick={() => handleDeleteBox(group.boxName, group.boxItems.length)}
+                              onClick={() => handleDeleteBox(group.boxId, group.boxName, group.boxItems.length)}
                               className="text-xs bg-white border border-red-300 text-red-600 px-2 py-1 rounded hover:bg-red-50 whitespace-nowrap font-medium"
                             >
                               Delete box

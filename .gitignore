@@ -3,3 +3,11 @@ dist/
 .env
 .env.local
 .DS_Store
+.vercel
+.env*
+.agents/
+.claude/
+skills-lock.json
+# migrate-data.mjs debug output — contains real user/school/repair data, never commit
+db/last-export.json
+db/skipped-rows.json

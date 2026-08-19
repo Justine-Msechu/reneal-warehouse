@@ -1,13 +1,7 @@
 import { useState } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../contexts/AuthContext'
-import { getUser } from '../services/api'
-
-function decodeJWT(token) {
-  try {
-    return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-  } catch { return null }
-}
+import { loginWithGoogle } from '../services/api'
 
 export default function Login() {
   const { login } = useAuth()
@@ -18,25 +12,17 @@ export default function Login() {
     setLoading(true)
     setError(null)
     try {
-      const decoded = decodeJWT(response.credential)
-      if (!decoded?.email) throw new Error('Could not read Google account info.')
-
-      const data = await getUser(decoded.email, response.credential)
+      // The server verifies the Google credential cryptographically and
+      // looks up the role by email — nothing from the client is trusted.
+      const data = await loginWithGoogle(response.credential)
       if (!data.user) {
         setError('Your Google account is not registered in the system. Contact the administrator to get access.')
         return
       }
-
-      login({
-        email: decoded.email,
-        name: decoded.name,
-        picture: decoded.picture,
-        role: data.user.role,
-        schoolName: data.user.schoolName || null,
-      }, response.credential)
+      login(data.user)
     } catch (err) {
       if (err.message === 'Unauthorized') {
-        setError('Sign-in failed. Make sure the Apps Script is deployed with the latest version.')
+        setError('Sign-in failed. Please try again.')
       } else {
         setError(err.message || 'Failed to sign in. Please try again.')
       }

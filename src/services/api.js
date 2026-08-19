@@ -1,20 +1,9 @@
-const SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || ''
+// API client for the Vercel Functions + Postgres backend. Frontend and API
+// are served from the same Vercel project (same-origin), so auth is a
+// httpOnly session cookie (`credentials: 'include'`) instead of a bearer
+// token carried in every request — the backend verifies it locally.
 
-// ── Auth token ────────────────────────────────────────────────
-// Reads the Google ID token stored at login. If expired, clears session.
-function getToken() {
-  const token = sessionStorage.getItem('rws_token')
-  if (!token) return ''
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    if (payload.exp && Date.now() / 1000 > payload.exp) {
-      sessionStorage.clear()
-      window.location.reload()
-      return ''
-    }
-  } catch {}
-  return token
-}
+const API_BASE = '/api'
 
 // ── Cache (localStorage) ──────────────────────────────────────
 // Online: serve cache if fresh (< 5 min), else fetch
@@ -39,107 +28,111 @@ function bust(...keys) {
 }
 
 // ── HTTP helpers ──────────────────────────────────────────────
-function handleAuthError(data) {
-  if (data.error === 'Unauthorized' || data.error === 'Forbidden') {
-    // Only reload if already logged in — don't loop during the login request itself
-    if (sessionStorage.getItem('rws_token')) {
+async function handleAuthError(res, data) {
+  if (res.status === 401 || res.status === 403) {
+    // Only reload if we thought we had a session — avoids a reload loop on the login screen itself
+    if (sessionStorage.getItem('rws_user')) {
       sessionStorage.clear()
       window.location.reload()
     }
-    throw new Error(data.error === 'Forbidden' ? 'You do not have permission for this action.' : 'Unauthorized')
+    throw new Error(res.status === 403 ? 'You do not have permission for this action.' : 'Unauthorized')
   }
+  if (data?.error) throw new Error(data.error)
 }
 
-async function request(params, tokenOverride) {
-  const url = new URL(SCRIPT_URL)
-  url.searchParams.set('token', tokenOverride || getToken())
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-  const res = await fetch(url.toString())
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-  const data = await res.json()
-  handleAuthError(data)
+async function request(path, params = {}) {
+  const url = new URL(path, window.location.origin)
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null) url.searchParams.set(k, v) })
+  const res = await fetch(url.toString(), { credentials: 'include' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) { await handleAuthError(res, data); throw new Error(`Request failed: ${res.status}`) }
   return data
 }
 
-async function post(body) {
+async function send(method, path, params = {}, body) {
   if (!navigator.onLine) throw new Error('You are offline. Connect to the internet to save changes.')
-  const res = await fetch(SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify({ ...body, token: getToken() }),
+  const url = new URL(path, window.location.origin)
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null) url.searchParams.set(k, v) })
+  const res = await fetch(url.toString(), {
+    method,
+    credentials: 'include',
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-  const data = await res.json()
-  handleAuthError(data)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) { await handleAuthError(res, data); throw new Error(data.error || `Request failed: ${res.status}`) }
   return data
 }
 
-async function cachedGet(key, params) {
+const post = (path, body) => send('POST', path, {}, body)
+const patch = (path, params, body) => send('PATCH', path, params, body)
+const del = (path, params) => send('DELETE', path, params)
+
+async function cachedGet(key, path, params) {
   const entry = getCacheEntry(key)
   const isOnline = navigator.onLine
 
-  // Online + fresh cache → return immediately
   if (entry && isOnline && Date.now() - entry.ts < TTL) return entry.data
-
-  // Offline + any cache → return whatever we have
   if (entry && !isOnline) return entry.data
 
-  // Online + stale/missing → fetch fresh
   if (isOnline) {
     try {
-      const data = await request(params)
+      const data = await request(path, params)
       putCache(key, data)
       return data
     } catch (err) {
-      if (entry) return entry.data // fetch failed but we have stale data — use it
+      if (entry) return entry.data
       throw err
     }
   }
 
-  // Offline + no cache
   throw new Error('You are offline and this data has not been loaded before. Please connect to the internet first.')
 }
 
+// ── Auth ──────────────────────────────────────────────────────
+export const loginWithGoogle = (credential) => send('POST', `${API_BASE}/auth`, { action: 'login' }, { credential })
+export const getSessionUser = () => request(`${API_BASE}/auth`, { action: 'session' })
+export const logout = () => send('POST', `${API_BASE}/auth`, { action: 'logout' })
+
 // ── Repairs ───────────────────────────────────────────────────
-export const getRepairs = () => cachedGet('repairs', { action: 'getRepairs' })
-export const addRepair = (data) => { bust('repairs'); return post({ action: 'addRepair', ...data }) }
-export const updateRepair = (data) => { bust('repairs'); return post({ action: 'updateRepair', ...data }) }
+export const getRepairs = () => cachedGet('repairs', `${API_BASE}/repairs`)
+export const addRepair = (data) => { bust('repairs'); return post(`${API_BASE}/repairs`, data) }
+export const updateRepair = (data) => { bust('repairs'); return patch(`${API_BASE}/repairs`, { id: data.id }, data) }
 
 // ── Spare Laptops ─────────────────────────────────────────────
-export const getSpareLaptops = () => cachedGet('laptops', { action: 'getSpareLaptops' })
-export const addSpareLaptop = (data) => { bust('laptops'); return post({ action: 'addSpareLaptop', ...data }) }
-export const updateSpareLaptop = (data) => { bust('laptops'); return post({ action: 'updateSpareLaptop', ...data }) }
+export const getSpareLaptops = () => cachedGet('laptops', `${API_BASE}/spare-laptops`)
+export const addSpareLaptop = (data) => { bust('laptops'); return post(`${API_BASE}/spare-laptops`, data) }
+export const updateSpareLaptop = (data) => { bust('laptops'); return patch(`${API_BASE}/spare-laptops`, { id: data.id }, data) }
 
 // ── Warehouse Inventory ───────────────────────────────────────
-export const getInventory = () => cachedGet('inventory', { action: 'getInventory' })
-export const addInventoryItem = (data) => { bust('inventory'); return post({ action: 'addInventoryItem', ...data }) }
-export const updateInventoryItem = (data) => { bust('inventory'); return post({ action: 'updateInventoryItem', ...data }) }
-export const deleteInventoryItem = (id) => { bust('inventory', 'deletedLog'); return post({ action: 'deleteInventoryItem', id }) }
-export const deleteInventoryBox = (boxName) => { bust('inventory', 'deletedLog'); return post({ action: 'deleteInventoryBox', boxName }) }
-export const getDeletedLog = () => cachedGet('deletedLog', { action: 'getDeletedLog' })
+export const getInventory = () => cachedGet('inventory', `${API_BASE}/inventory`, { resource: 'items' })
+export const addInventoryItem = (data) => { bust('inventory'); return post(`${API_BASE}/inventory?resource=items`, data) }
+export const updateInventoryItem = (data) => { bust('inventory'); return patch(`${API_BASE}/inventory`, { resource: 'items', id: data.id }, data) }
+export const deleteInventoryItem = (id) => { bust('inventory', 'deletedLog'); return del(`${API_BASE}/inventory`, { resource: 'items', id }) }
+export const restoreInventoryItem = (id) => { bust('inventory', 'deletedLog'); return post(`${API_BASE}/inventory?${new URLSearchParams({ resource: 'items', id, restore: '1' })}`) }
+export const deleteInventoryBox = (boxId) => { bust('inventory', 'deletedLog'); return del(`${API_BASE}/inventory`, { resource: 'boxes', id: boxId }) }
+export const getDeletedLog = () => cachedGet('deletedLog', `${API_BASE}/inventory`, { resource: 'deleted-log' })
 
 // ── Schools ───────────────────────────────────────────────────
-export const getSchools = () => cachedGet('schools', { action: 'getSchools' })
-export const addSchool = (data) => { bust('schools'); return post({ action: 'addSchool', ...data }) }
-export const updateSchool = (data) => { bust('schools'); return post({ action: 'updateSchool', ...data }) }
+export const getSchools = () => cachedGet('schools', `${API_BASE}/schools`)
+export const addSchool = (data) => { bust('schools'); return post(`${API_BASE}/schools`, data) }
+export const updateSchool = (data) => { bust('schools'); return patch(`${API_BASE}/schools`, { id: data.id }, data) }
 
 // ── Withdrawals ───────────────────────────────────────────────
-export const getWithdrawals = () => cachedGet('withdrawals', { action: 'getWithdrawals' })
-export const logWithdrawal = (data) => { bust('withdrawals', 'inventory'); return post({ action: 'logWithdrawal', ...data }) }
-export const updateWithdrawal = (data) => { bust('withdrawals'); return post({ action: 'updateWithdrawal', ...data }) }
+export const getWithdrawals = () => cachedGet('withdrawals', `${API_BASE}/withdrawals`)
+export const logWithdrawal = (data) => { bust('withdrawals', 'inventory'); return post(`${API_BASE}/withdrawals`, data) }
+export const updateWithdrawal = (data) => { bust('withdrawals'); return patch(`${API_BASE}/withdrawals`, { id: data.id }, data) }
 
 // ── Deployments ───────────────────────────────────────────────
-export const getDeployments = () => cachedGet('deployments', { action: 'getDeployments' })
-export const logDeployment = (data) => { bust('deployments', 'laptops'); return post({ action: 'logDeployment', ...data }) }
-export const updateDeployment = (data) => { bust('deployments'); return post({ action: 'updateDeployment', ...data }) }
+export const getDeployments = () => cachedGet('deployments', `${API_BASE}/deployments`)
+export const logDeployment = (data) => { bust('deployments', 'laptops'); return post(`${API_BASE}/deployments`, data) }
+export const updateDeployment = (data) => { bust('deployments'); return patch(`${API_BASE}/deployments`, { id: data.id }, data) }
 
 // ── Users ─────────────────────────────────────────────────────
-// getUser is called at login before the token is in sessionStorage, so we pass it explicitly
-export const getUser = (email, token) => request({ action: 'getUser', email }, token)
-export const getUsers = () => cachedGet('users', { action: 'getUsers' })
-export const addUser = (data) => { bust('users'); return post({ action: 'addUser', ...data }) }
-export const removeUser = (data) => { bust('users'); return post({ action: 'removeUser', ...data }) }
+export const getUsers = () => cachedGet('users', `${API_BASE}/users`)
+export const addUser = (data) => { bust('users'); return post(`${API_BASE}/users`, data) }
+export const removeUser = (data) => { bust('users'); return del(`${API_BASE}/users`, { email: data.email }) }
 
 // ── AI Assistant ──────────────────────────────────────────────
-// confirm must be explicitly set to true to let the assistant run a
-// data-changing tool (e.g. updateRepairStatus, assignTechnician).
-export const askAI = (question, confirm = false) => post({ action: 'askAI', question, confirm })
+// Not yet migrated — see ai/ follow-up. confirm gates data-changing tool calls.
+export const askAI = (question, confirm = false) => post(`${API_BASE}/ai/ask`, { question, confirm })

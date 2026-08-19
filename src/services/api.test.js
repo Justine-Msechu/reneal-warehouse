@@ -1,16 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { getRepairs, addRepair } from './api'
 
-// A minimal unsigned JWT-shaped token: header.payload.signature, base64url encoded.
-function fakeToken(payload) {
-  const b64url = (obj) => btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_')
-  return `${b64url({ alg: 'none' })}.${b64url(payload)}.sig`
-}
-
-function mockFetchOnce(jsonBody, ok = true) {
+function mockFetchOnce(jsonBody, status = 200) {
   global.fetch = vi.fn().mockResolvedValue({
-    ok,
-    status: ok ? 200 : 500,
+    ok: status >= 200 && status < 300,
+    status,
     json: () => Promise.resolve(jsonBody),
   })
 }
@@ -112,48 +106,33 @@ describe('post (via addRepair)', () => {
 
     expect(localStorage.getItem('rws_repairs')).toBeNull()
   })
+
+  it('sends credentials so the httpOnly session cookie is included', async () => {
+    mockFetchOnce({ success: true, id: 'X' })
+
+    await addRepair({ referenceNumber: 'X', schoolName: 'Y', problemIdentified: 'Z' })
+
+    expect(global.fetch.mock.calls[0][1].credentials).toBe('include')
+  })
 })
 
+// Auth is now a server-verified httpOnly session cookie, not a client-held
+// JWT — the client no longer decodes or expires tokens itself. It only
+// reacts to the HTTP status the server sends back.
 describe('auth error handling', () => {
-  it('clears the session and throws when the server says Unauthorized', async () => {
-    sessionStorage.setItem('rws_token', fakeToken({ exp: Math.floor(Date.now() / 1000) + 3600 }))
-    mockFetchOnce({ error: 'Unauthorized' })
+  it('clears the session and reloads when the server says 401 Unauthorized', async () => {
+    sessionStorage.setItem('rws_user', JSON.stringify({ email: 'a@b.com', role: 'admin' }))
+    mockFetchOnce({ error: 'Unauthorized' }, 401)
 
     await expect(addRepair({ referenceNumber: 'X' })).rejects.toThrow('Unauthorized')
-    expect(sessionStorage.getItem('rws_token')).toBeNull()
+    expect(sessionStorage.getItem('rws_user')).toBeNull()
     expect(window.location.reload).toHaveBeenCalled()
   })
 
-  it('surfaces a friendly message when the server says Forbidden', async () => {
-    sessionStorage.setItem('rws_token', fakeToken({ exp: Math.floor(Date.now() / 1000) + 3600 }))
-    mockFetchOnce({ error: 'Forbidden' })
+  it('surfaces a friendly message on 403 Forbidden without reloading if no session was cached', async () => {
+    mockFetchOnce({ error: 'Forbidden' }, 403)
 
     await expect(addRepair({ referenceNumber: 'X' })).rejects.toThrow(/permission/i)
-  })
-})
-
-describe('token expiry (getToken, exercised via addRepair)', () => {
-  it('clears an expired token, reloads, and sends an empty token rather than the expired one', async () => {
-    const expired = fakeToken({ exp: Math.floor(Date.now() / 1000) - 60 }) // expired 1 min ago
-    sessionStorage.setItem('rws_token', expired)
-    mockFetchOnce({ success: true, id: 'X' })
-
-    await addRepair({ referenceNumber: 'X', schoolName: 'Y', problemIdentified: 'Z' })
-
-    expect(sessionStorage.getItem('rws_token')).toBeNull()
-    expect(window.location.reload).toHaveBeenCalled()
-    const sentBody = JSON.parse(global.fetch.mock.calls[0][1].body)
-    expect(sentBody.token).toBe('')
-  })
-
-  it('sends a still-valid token unchanged', async () => {
-    const valid = fakeToken({ exp: Math.floor(Date.now() / 1000) + 3600 })
-    sessionStorage.setItem('rws_token', valid)
-    mockFetchOnce({ success: true, id: 'X' })
-
-    await addRepair({ referenceNumber: 'X', schoolName: 'Y', problemIdentified: 'Z' })
-
-    const sentBody = JSON.parse(global.fetch.mock.calls[0][1].body)
-    expect(sentBody.token).toBe(valid)
+    expect(window.location.reload).not.toHaveBeenCalled()
   })
 })
