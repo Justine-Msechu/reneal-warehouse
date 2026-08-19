@@ -203,17 +203,42 @@ export default function RepairDashboard() {
     return acc
   }, {})
 
+  // "Fixed" means repaired but not yet picked up/returned to the school —
+  // exactly the set that's ready for collection. Independent of whatever
+  // search/filter is active on the main table, so Print always means
+  // "everything currently awaiting pickup," most recent first.
+  const readyForPickup = repairs
+    .filter((r) => r.status === 'Fixed')
+    .sort((a, b) => (b.dateRepaired || '').localeCompare(a.dateRepaired || ''))
+
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 no-print">
         <h1 className="text-xl font-bold text-gray-800">Repair Dashboard</h1>
-        {canEdit && (
-          <Link to="/intake" className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap">
-            + Log New Repair
-          </Link>
-        )}
+        <div className="flex gap-2">
+          {readyForPickup.length > 0 && (
+            <button
+              onClick={() => window.print()}
+              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+            >
+              🖨 Print Pickup List ({readyForPickup.length})
+            </button>
+          )}
+          {canEdit && (
+            <Link to="/intake" className="bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-800 whitespace-nowrap">
+              + Log New Repair
+            </Link>
+          )}
+        </div>
       </div>
 
+      {/* Print-only pickup list — hidden on screen, shown only when printing
+          (see PrintPickupList's <style>) so window.print() doesn't need to
+          navigate away from the dashboard or fight with the on-screen table's
+          filters/pagination. */}
+      <PrintPickupList repairs={readyForPickup} />
+
+      <div className="no-print">
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {STATUSES.slice(1).map((s) => (
@@ -560,6 +585,47 @@ export default function RepairDashboard() {
           </form>
         </div>
       )}
+      </div>
+    </div>
+  )
+}
+
+function PrintPickupList({ repairs }) {
+  const today = new Date().toISOString().slice(0, 10)
+  return (
+    <div className="print-only">
+      <style>{`
+        .print-only { display: none; }
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block; }
+        }
+      `}</style>
+      <h1 className="text-xl font-bold mb-1">Laptops Ready for Pickup</h1>
+      <p className="text-sm text-gray-600 mb-4">Printed {today} — {repairs.length} laptop(s) fixed and awaiting collection</p>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b-2 border-black">
+            {['Device ID', 'School', 'Repaired', 'Technician', 'Collected By (sign)'].map((h) => (
+              <th key={h} className="text-left py-2 pr-3 font-semibold">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {repairs.map((r) => (
+            <tr key={r.id} className="border-b border-gray-300">
+              <td className="py-2 pr-3">
+                {r.laptopIdNumber || r.referenceNumber}
+                {r.model && <div className="text-xs text-gray-500">{r.model}</div>}
+              </td>
+              <td className="py-2 pr-3">{r.schoolName}</td>
+              <td className="py-2 pr-3">{r.dateRepaired || '—'}</td>
+              <td className="py-2 pr-3">{r.technician || '—'}</td>
+              <td className="py-2 pr-3">&nbsp;</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
