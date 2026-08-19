@@ -77,10 +77,19 @@ export default function RepairDashboard() {
   async function handleStatusChange(repair, newStatus) {
     setUpdating(repair.id)
     try {
-      const res = await updateRepair({ id: repair.id, status: newStatus })
+      // Stamp dateRepaired the moment a repair first becomes Fixed — this is
+      // the only place that transition happens, so without this the field
+      // never gets set and there's nothing to filter/print a pickup list by.
+      // Only set it once: flipping status around later shouldn't overwrite
+      // the original repair date.
+      const patch = { id: repair.id, status: newStatus }
+      if (newStatus === 'Fixed' && !repair.dateRepaired) {
+        patch.dateRepaired = new Date().toISOString().slice(0, 10)
+      }
+      const res = await updateRepair(patch)
       if (res.error) { alert(`Failed to update status: ${res.error}`); return }
       setRepairs((prev) =>
-        prev.map((r) => (r.id === repair.id ? { ...r, status: newStatus } : r))
+        prev.map((r) => (r.id === repair.id ? { ...r, ...patch } : r))
       )
     } catch (err) {
       alert(`Failed to update status: ${err.message}`)
@@ -137,6 +146,7 @@ export default function RepairDashboard() {
       laptopIdNumber: repair.laptopIdNumber || '',
       model: repair.model || '',
       dateReceived: repair.dateReceived || '',
+      dateRepaired: repair.dateRepaired || '',
       schoolName: repair.schoolName || '',
       receivedBy: repair.receivedBy || '',
       problemIdentified: repair.problemIdentified || '',
@@ -588,6 +598,12 @@ export default function RepairDashboard() {
               <EditField label="Date Received">
                 <input type="date" value={editForm.dateReceived}
                   onChange={(e) => setEditForm((f) => ({ ...f, dateReceived: e.target.value }))}
+                  className={editInput} />
+              </EditField>
+
+              <EditField label="Date Repaired">
+                <input type="date" value={editForm.dateRepaired}
+                  onChange={(e) => setEditForm((f) => ({ ...f, dateRepaired: e.target.value }))}
                   className={editInput} />
               </EditField>
 
