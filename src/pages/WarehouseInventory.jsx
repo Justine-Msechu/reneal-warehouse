@@ -184,6 +184,17 @@ export default function WarehouseInventory() {
     if (key === 'deletedLog' && !deletedLogLoaded) loadDeletedLog()
   }
 
+  async function handleRestore(d) {
+    if (!confirm(`Restore "${d.item}" (qty ${d.quantity}) into box "${d.boxName}"?`)) return
+    try {
+      const res = await addInventoryItem({ boxName: d.boxName, item: d.item, quantity: d.quantity, description: d.description })
+      if (res.error) { alert(res.error); return }
+      setItems((prev) => [...prev, { id: res.id, boxName: d.boxName, item: d.item, quantity: d.quantity, description: d.description }])
+    } catch (err) {
+      alert(err.message === 'Unauthorized' ? 'Your session has expired. Please sign in again.' : `Failed to restore: ${err.message}`)
+    }
+  }
+
   async function handleDeleteItem(item) {
     if (!confirm(`Delete "${item.item}" from ${item.boxName}? This cannot be undone.`)) return
     try {
@@ -637,14 +648,14 @@ export default function WarehouseInventory() {
           <table className="min-w-full text-sm bg-white">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['When', 'Deleted By', 'Type', 'Box', 'Item', 'Qty', 'Description'].map((h) => (
+                {['When', 'Deleted By', 'Type', 'Box', 'Item', 'Qty', 'Description', ''].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visibleDeletedLog.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-400">Nothing deleted yet.</td></tr>
+                <tr><td colSpan={8} className="text-center py-8 text-gray-400">Nothing deleted yet.</td></tr>
               ) : visibleDeletedLog.map((d, i) => (
                 <tr key={d.id || i} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{d.timestamp}</td>
@@ -658,6 +669,16 @@ export default function WarehouseInventory() {
                   <td className="px-3 py-2">{d.item}</td>
                   <td className="px-3 py-2 text-gray-600">{d.quantity}</td>
                   <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={d.description}>{d.description || '—'}</td>
+                  <td className="px-3 py-2">
+                    {canEdit && (
+                      <button
+                        onClick={() => handleRestore(d)}
+                        className="text-xs bg-green-50 border border-green-300 text-green-700 px-2 py-1 rounded hover:bg-green-100 whitespace-nowrap font-medium"
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
