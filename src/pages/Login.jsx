@@ -34,9 +34,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-800 to-blue-600 px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full text-center">
-        <div className="w-16 h-16 bg-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <span className="text-white font-bold text-3xl">R</span>
-        </div>
+        <img src="/logo.png" alt="Reneal" className="w-16 h-16 object-contain mx-auto mb-4" />
         <h1 className="text-xl font-bold text-gray-800 mb-1">Reneal Warehouse System</h1>
         <p className="text-sm text-gray-500 mb-6">Tanzania — Sign in to continue</p>
 
