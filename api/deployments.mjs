@@ -2,6 +2,7 @@
 // PATCH    /api/deployments?id=:id  — correct the log entry (does not recompute laptop location)
 import { getPool, withTransaction } from './_lib/db.mjs'
 import { requireRole } from './_lib/auth.mjs'
+import { logAudit, diffApi } from './_lib/audit.mjs'
 
 const toApi = (r) => ({
   id: r.id, date: r.date, laptopId: r.laptop_id, idNumber: r.id_number_snapshot, action: r.action,
@@ -44,11 +45,17 @@ export default async function handler(req, res) {
         const school = body.school ? await client.query('SELECT id FROM schools WHERE name = $1', [body.school]) : { rows: [] }
         const d = await client.query(
           `INSERT INTO deployments (date, laptop_id, id_number_snapshot, action, school_id, school_name_snapshot, taken_by, notes)
-           VALUES (COALESCE($1, CURRENT_DATE),$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+           VALUES (COALESCE($1, CURRENT_DATE),$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
           [body.date || null, body.laptopId, laptop.rows[0].id_number, body.action,
            school.rows[0]?.id || null, body.school || null, body.takenBy, body.notes || null]
         )
-        return d.rows[0].id
+        const row = d.rows[0]
+        await logAudit(client, {
+          actorEmail: user.email, action: 'create', entityType: 'deployment', entityId: row.id,
+          summary: `${row.action} laptop ${row.id_number_snapshot}${row.action === 'Deployed' ? ' to ' + row.school_name_snapshot : ''} — ${row.taken_by}`,
+          changes: { after: toApi(row) },
+        })
+        return row.id
       })
       return res.status(200).json({ success: true, id: newId })
     } catch (err) {
@@ -68,9 +75,23 @@ export default async function handler(req, res) {
       if (body[key] !== undefined) { values.push(body[key]); sets.push(`${col} = $${values.length}`) }
     }
     if (sets.length === 0) return res.status(200).json({ success: true })
-    values.push(id)
-    const { rowCount } = await pool.query(`UPDATE deployments SET ${sets.join(', ')} WHERE id = $${values.length}`, values)
-    if (rowCount === 0) return res.status(404).json({ error: 'Deployment not found' })
+
+    const notFound = await withTransaction(async (client) => {
+      const before = await client.query('SELECT * FROM deployments WHERE id = $1', [id])
+      if (before.rows.length === 0) return true
+      const vals = [...values, id]
+      await client.query(`UPDATE deployments SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals)
+      const { changes } = diffApi(toApi(before.rows[0]), body, Object.keys(COLUMN))
+      if (changes) {
+        await logAudit(client, {
+          actorEmail: user.email, action: 'update', entityType: 'deployment', entityId: Number(id),
+          summary: `Updated deployment log for laptop ${before.rows[0].id_number_snapshot}`,
+          changes,
+        })
+      }
+      return false
+    })
+    if (notFound) return res.status(404).json({ error: 'Deployment not found' })
     return res.status(200).json({ success: true })
   }
 

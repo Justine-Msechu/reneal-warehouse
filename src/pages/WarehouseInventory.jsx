@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from 'react'
 import { getInventory, addInventoryItem, updateInventoryItem, deleteInventoryItem, restoreInventoryItem, deleteInventoryBox, getWithdrawals, logWithdrawal, updateWithdrawal, getSchools, getDeletedLog } from '../services/api'
 import Pagination from '../components/Pagination'
 import { useAuth } from '../contexts/AuthContext'
+import { LOW_STOCK_THRESHOLD } from '../../shared/constants.mjs'
 
 const PER_PAGE = 20
 
@@ -510,7 +511,7 @@ export default function WarehouseInventory() {
                       <tr className="hover:bg-gray-50">
                         <td className="px-3 py-2">{item.item}</td>
                         <td className="px-3 py-2">
-                          <span className={`font-semibold ${Number(item.quantity) === 0 ? 'text-red-500' : Number(item.quantity) <= 3 ? 'text-amber-500' : 'text-gray-800'}`}>
+                          <span className={`font-semibold ${Number(item.quantity) === 0 ? 'text-red-500' : Number(item.quantity) <= LOW_STOCK_THRESHOLD ? 'text-amber-500' : 'text-gray-800'}`}>
                             {item.quantity}
                           </span>
                         </td>

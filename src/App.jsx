@@ -16,6 +16,7 @@ const WarehouseInventory = lazy(() => import('./pages/WarehouseInventory'))
 const Schools = lazy(() => import('./pages/Schools'))
 const Reports = lazy(() => import('./pages/Reports'))
 const UserManagement = lazy(() => import('./pages/UserManagement'))
+const ActivityLog = lazy(() => import('./pages/ActivityLog'))
 const ReceiveShipment = lazy(() => import('./pages/ReceiveShipment'))
 const Assistant = lazy(() => import('./pages/Assistant'))
 
@@ -53,6 +54,7 @@ function AppRoutes() {
           <Route path="reports" element={<Reports />} />
           <Route path="assistant" element={<Assistant />} />
           {user.role === 'admin' && <Route path="users" element={<UserManagement />} />}
+          {user.role === 'admin' && <Route path="activity-log" element={<ActivityLog />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

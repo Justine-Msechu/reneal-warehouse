@@ -133,6 +133,12 @@ export const getUsers = () => cachedGet('users', `${API_BASE}/users`)
 export const addUser = (data) => { bust('users'); return post(`${API_BASE}/users`, data) }
 export const removeUser = (data) => { bust('users'); return del(`${API_BASE}/users`, { email: data.email }) }
 
+// ── Activity Log ──────────────────────────────────────────────
+// Not run through cachedGet: it's paged/filtered admin-monitoring data, and
+// that cache layer has no notion of page/filter-scoped keys.
+export const getActivityLog = ({ page = 1, perPage = 25, entityType, actor } = {}) =>
+  request(`${API_BASE}/activity-log`, { page, perPage, entityType, actor })
+
 // ── AI Assistant ──────────────────────────────────────────────
 // Not yet migrated — see ai/ follow-up. confirm gates data-changing tool calls.
 export const askAI = (question, confirm = false) => post(`${API_BASE}/ai/ask`, { question, confirm })

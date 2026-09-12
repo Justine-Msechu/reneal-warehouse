@@ -168,3 +168,27 @@ CREATE TABLE deleted_log (
   quantity     NUMERIC(12,2),
   description  TEXT
 );
+
+-- ─── Audit Log (append-only, cross-entity activity trail) ────────────────
+-- Generic across repairs/withdrawals/deployments/users. No FK on entity_id:
+-- it's a polymorphic reference across four independent PK sequences, and
+-- users is the one entity type that's hard-deleted, so a real FK would
+-- either block the delete or cascade-erase the very history this table
+-- exists to preserve — entity_id simply stops resolving to a live row after
+-- a user delete, which is expected, not a bug.
+CREATE TABLE audit_log (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  "timestamp"  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_email  CITEXT NOT NULL,
+  action       TEXT NOT NULL CHECK (action IN ('create','update','delete')),
+  entity_type  TEXT NOT NULL CHECK (entity_type IN ('repair','withdrawal','deployment','user')),
+  entity_id    BIGINT NOT NULL,
+  summary      TEXT NOT NULL,
+  -- Shallow {before,after} diff on update, {after} snapshot on create,
+  -- {before} snapshot on delete. Keyed by API field names (camelCase,
+  -- matching each route's toApi()), not raw DB columns.
+  changes      JSONB
+);
+CREATE INDEX ON audit_log (entity_type, entity_id);
+CREATE INDEX ON audit_log (actor_email);
+CREATE INDEX ON audit_log ("timestamp" DESC);

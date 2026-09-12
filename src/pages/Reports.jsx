@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts'
 import { getRepairs, getSpareLaptops, getInventory, getSchools, getWithdrawals, getDeployments } from '../services/api'
+import { LOW_STOCK_THRESHOLD, OVERDUE_REPAIR_DAYS } from '../../shared/constants.mjs'
 
 // #08448c / #2d8b39 are this app's brand blue/green (from the Reneal logo,
 // see tailwind.config.js) — recharts takes raw color props, not Tailwind
@@ -86,8 +87,15 @@ export default function Reports() {
     }, {})
   ).map(([tech, count]) => ({ tech, count })).sort((a, b) => b.count - a.count)
 
+  // Overdue is a "right now" concept — always computed off allRepairs, not
+  // the year-filtered `repairs`, so changing the year filter doesn't hide it.
+  const overdueRepairs = allRepairs.filter((r) =>
+    ['Received', 'Under Repair'].includes(r.status) &&
+    r.dateReceived && (Date.now() - new Date(r.dateReceived)) / 86400000 > OVERDUE_REPAIR_DAYS
+  )
+
   // ── Warehouse stats ──
-  const lowStock = inventory.filter((i) => Number(i.quantity) > 0 && Number(i.quantity) <= 5)
+  const lowStock = inventory.filter((i) => Number(i.quantity) > 0 && Number(i.quantity) <= LOW_STOCK_THRESHOLD)
   const outOfStock = inventory.filter((i) => Number(i.quantity) === 0)
   const stockByBox = Object.entries(
     inventory.reduce((acc, i) => { acc[i.boxName] = (acc[i.boxName] || 0) + 1; return acc }, {})
@@ -194,6 +202,24 @@ export default function Reports() {
                   </div>
                 ))}
               </div>
+            </Card>
+
+            {/* Overdue repairs */}
+            <Card title="Overdue Repairs">
+              {overdueRepairs.length === 0 ? (
+                <div className="text-center py-8 text-green-600 text-sm">✓ No overdue repairs</div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {overdueRepairs.map((r) => (
+                    <div key={r.id} className="flex justify-between items-center px-3 py-2 bg-red-50 border border-red-200 rounded text-sm">
+                      <span className="font-medium text-red-700 truncate">{r.referenceNumber} — {r.schoolName}</span>
+                      <span className="text-red-600 font-bold ml-2 shrink-0">
+                        {Math.floor((Date.now() - new Date(r.dateReceived)) / 86400000)}d
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* Repairs by year — always shows all years for trend context */}

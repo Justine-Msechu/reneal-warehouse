@@ -3,6 +3,7 @@
 import { getPool, withTransaction } from './_lib/db.mjs'
 import { requireRole } from './_lib/auth.mjs'
 import { formatQuantity } from './_lib/quantity.mjs'
+import { logAudit, diffApi } from './_lib/audit.mjs'
 
 const toApi = (r) => ({
   id: r.id, date: r.date, itemId: r.item_id, boxName: r.box_name_snapshot, item: r.item_snapshot,
@@ -52,11 +53,17 @@ export default async function handler(req, res) {
         const w = await client.query(
           `INSERT INTO withdrawals (date, item_id, box_name_snapshot, item_snapshot, quantity_taken,
              remaining_qty, taken_by, destination, notes)
-           VALUES (COALESCE($1, CURRENT_DATE),$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+           VALUES (COALESCE($1, CURRENT_DATE),$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
           [body.date || null, body.itemId, locked.rows[0].box_name, locked.rows[0].item, taken,
            remaining, body.takenBy, body.destination || null, body.notes || null]
         )
-        return { id: w.rows[0].id, remaining }
+        const row = w.rows[0]
+        await logAudit(client, {
+          actorEmail: user.email, action: 'create', entityType: 'withdrawal', entityId: row.id,
+          summary: `Withdrew ${formatQuantity(taken, null)} × ${row.item_snapshot} from ${row.box_name_snapshot} (${row.destination || row.taken_by})`,
+          changes: { after: toApi(row) },
+        })
+        return { id: row.id, remaining }
       })
       return res.status(200).json({ success: true, id: result.id, remaining: formatQuantity(result.remaining, null) })
     } catch (err) {
@@ -76,9 +83,23 @@ export default async function handler(req, res) {
       if (body[key] !== undefined) { values.push(body[key]); sets.push(`${col} = $${values.length}`) }
     }
     if (sets.length === 0) return res.status(200).json({ success: true })
-    values.push(id)
-    const { rowCount } = await pool.query(`UPDATE withdrawals SET ${sets.join(', ')} WHERE id = $${values.length}`, values)
-    if (rowCount === 0) return res.status(404).json({ error: 'Withdrawal not found' })
+
+    const notFound = await withTransaction(async (client) => {
+      const before = await client.query('SELECT * FROM withdrawals WHERE id = $1', [id])
+      if (before.rows.length === 0) return true
+      const vals = [...values, id]
+      await client.query(`UPDATE withdrawals SET ${sets.join(', ')} WHERE id = $${vals.length}`, vals)
+      const { changes } = diffApi(toApi(before.rows[0]), body, Object.keys(COLUMN))
+      if (changes) {
+        await logAudit(client, {
+          actorEmail: user.email, action: 'update', entityType: 'withdrawal', entityId: Number(id),
+          summary: `Updated withdrawal of ${before.rows[0].item_snapshot} from ${before.rows[0].box_name_snapshot}`,
+          changes,
+        })
+      }
+      return false
+    })
+    if (notFound) return res.status(404).json({ error: 'Withdrawal not found' })
     return res.status(200).json({ success: true })
   }
 
