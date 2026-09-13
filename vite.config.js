@@ -2,40 +2,25 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// PWA/service-worker support (vite-plugin-pwa) was dropped in the move to
-// Vercel, then reintroduced here with `registerType: 'prompt'` instead of
-// the old `autoUpdate` — that silent auto-swap was what caused a real
-// incident where a deployed UI change wasn't visible until a hard refresh.
-// 'prompt' + src/components/UpdateToast.jsx means an update is only ever
-// applied when someone clicks "Reload", never silently. Offline reads are
-// still separately covered by the localStorage cache in
-// src/services/api.js, which doesn't depend on the service worker at all.
+// PWA/service-worker support was dropped in the move to Vercel (an
+// autoUpdate-based SW caused a "why can't I see my change" incident), then
+// reintroduced with registerType:'prompt' to avoid silent updates — but
+// that reintroduction caused something worse: a client whose cached bundle
+// goes stale enough that its precached JS/CSS chunks get evicted from the
+// next few deployments outright breaks (404s), and because the broken page
+// never renders, it can never show the "reload" prompt that would have
+// fixed it. That's a self-inflicted, unrecoverable-without-manually-
+// clearing-site-data outage, worse than the thing 'prompt' was meant to
+// prevent. `selfDestroying: true` ships a service worker whose only job is
+// to unregister itself and wipe its own caches — the browser's SW update
+// check runs independently of whether the page's own JS ever executes, so
+// this reaches and heals even fully broken/stuck clients. Once existing
+// installs have had time to clean themselves up, this plugin can be
+// removed entirely; until then, leaving it in is harmless and self-limiting.
 export default defineConfig({
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'prompt',
-      injectRegister: null,
-      workbox: {
-        navigateFallbackDenylist: [/^\/api/],
-      },
-      manifest: {
-        name: 'Reneal Warehouse',
-        short_name: 'Reneal Warehouse',
-        description: 'Warehouse management for Reneal Tanzania',
-        start_url: '/',
-        scope: '/',
-        display: 'standalone',
-        background_color: '#08448c',
-        theme_color: '#08448c',
-        icons: [
-          // Placeholder: public/logo.png is 64x55 (non-square, too small
-          // for a PWA icon). Using the pre-existing generic icon.svg until
-          // a proper square/high-res export of the real logo exists.
-          { src: '/icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' },
-        ],
-      },
-    }),
+    VitePWA({ selfDestroying: true }),
   ],
   test: {
     environment: 'jsdom',

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import UpdateToast from './UpdateToast'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -105,8 +104,6 @@ export default function Layout() {
           </nav>
         )}
       </header>
-
-      <UpdateToast />
 
       {!online && (
         <div className="bg-amber-500 text-white text-sm text-center py-2 px-4 font-medium">
