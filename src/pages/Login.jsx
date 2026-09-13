@@ -49,11 +49,12 @@ export default function Login() {
     <div className="min-h-screen grid md:grid-cols-2">
       <div className="bg-gradient-to-br from-blue-800 to-blue-900 text-white px-8 py-10 md:py-16 flex flex-col justify-between">
         <div>
-          <div className="flex items-center gap-3 mb-10">
-            <div className="bg-white rounded-2xl p-3 shadow-lg shadow-black/20">
-              <img src="/logo.png" alt="" className="h-12 w-auto object-contain" />
+          <div className="mb-10">
+            <div className="flex items-center gap-2.5">
+              <img src="/logo.png" alt="" className="h-8 w-auto object-contain" />
+              <span className="text-3xl font-extrabold tracking-tight">Reneal</span>
             </div>
-            <span className="text-xl font-bold tracking-wide">Reneal</span>
+            <div className="text-[11px] uppercase tracking-widest text-blue-300 mt-1.5">Warehouse System</div>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold leading-snug max-w-sm">
             Refurbished laptops, back in classrooms across Tanzania.
