@@ -3,8 +3,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts'
-import { getRepairs, getSpareLaptops, getInventory, getSchools, getWithdrawals, getDeployments } from '../services/api'
+import { getRepairs, getSpareLaptops, getInventory, getSchools, getWithdrawals, getDeployments, getUsers, getDeletedLog } from '../services/api'
 import { LOW_STOCK_THRESHOLD, OVERDUE_REPAIR_DAYS } from '../../shared/constants.mjs'
+import { useAuth } from '../contexts/AuthContext'
 
 // #08448c / #2d8b39 are this app's brand blue/green (from the Reneal logo,
 // see tailwind.config.js) — recharts takes raw color props, not Tailwind
@@ -18,11 +19,13 @@ const STATUS_COLORS = {
 }
 
 export default function Reports() {
+  const { user } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [section, setSection] = useState('all') // 'all' | 'repairs' | 'warehouse' | 'laptops'
   const [yearFilter, setYearFilter] = useState('All')
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -45,6 +48,28 @@ export default function Reports() {
       setError('Could not load report data.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Users, the deleted-item log, and the exceljs library itself (a heavy
+  // dependency) aren't otherwise loaded on this page — pulled in only when
+  // someone actually exports, since most Reports viewers aren't admins and
+  // will never click this button.
+  async function handleExportBackup() {
+    setExporting(true)
+    try {
+      const [{ exportBackupToExcel }, usersRes, deletedLogRes] = await Promise.all([
+        import('../utils/exportBackup'), getUsers(), getDeletedLog(),
+      ])
+      await exportBackupToExcel({
+        repairs: data.repairs, laptops: data.laptops, schools: data.schools, inventory: data.inventory,
+        withdrawals: data.withdrawals, deployments: data.deployments,
+        users: usersRes.users || [], deletedLog: deletedLogRes.log || [],
+      })
+    } catch {
+      alert('Failed to export backup. Please try again.')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -143,6 +168,12 @@ export default function Reports() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
         <h1 className="text-xl font-bold text-gray-800">Reports</h1>
         <div className="flex flex-wrap gap-2">
+          {user?.role === 'admin' && (
+            <button onClick={handleExportBackup} disabled={exporting}
+              className="bg-green-700 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-green-800 disabled:opacity-60">
+              {exporting ? 'Exporting...' : 'Export to Excel (Backup)'}
+            </button>
+          )}
           <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}
             className="border border-gray-300 rounded px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
             {availableYears.map((y) => <option key={y}>{y}</option>)}
