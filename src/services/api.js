@@ -94,6 +94,9 @@ export const loginWithGoogle = (credential) => send('POST', `${API_BASE}/auth`, 
 export const getSessionUser = () => request(`${API_BASE}/auth`, { action: 'session' })
 export const logout = () => send('POST', `${API_BASE}/auth`, { action: 'logout' })
 
+// Public (no session needed) — three aggregate counts shown on the Login page.
+export const getPublicStats = () => request(`${API_BASE}/ping`, { stats: 1 })
+
 // ── Repairs ───────────────────────────────────────────────────
 export const getRepairs = () => cachedGet('repairs', `${API_BASE}/repairs`)
 export const addRepair = (data) => { bust('repairs'); return post(`${API_BASE}/repairs`, data) }
