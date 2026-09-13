@@ -3,6 +3,7 @@ const colors = {
   'Under Repair': 'bg-orange-100 text-orange-800',
   'Fixed':       'bg-green-100 text-green-800',
   'Returned':    'bg-gray-100 text-gray-700',
+  'Dead':        'bg-red-100 text-red-700',
 }
 
 export default function StatusBadge({ status }) {

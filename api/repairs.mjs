@@ -18,6 +18,21 @@ const COLUMN = {
   dateReturnedToSchool: 'date_returned_to_school', remarks: 'remarks', laptopIdNumber: 'laptop_id_number',
 }
 
+// A school's laptop_count tracks laptops currently working AT the school.
+// 'Returned' is the only status where a laptop counts as home — every other
+// status (Received/Under Repair/Fixed/Dead) means it's away being repaired
+// or has been written off. Dead never gets a +1 back; it just never leaves
+// the "away" bucket once decremented on intake.
+const isHome = (status) => status === 'Returned'
+
+async function adjustSchoolLaptopCount(client, schoolId, delta) {
+  if (!schoolId) return
+  await client.query(
+    'UPDATE schools SET laptop_count = GREATEST(laptop_count + $1, 0), updated_at = now() WHERE id = $2',
+    [delta, schoolId]
+  )
+}
+
 export default async function handler(req, res) {
   const { id } = req.query
   const pool = getPool()
@@ -47,6 +62,7 @@ export default async function handler(req, res) {
          body.technician || null, body.remarks || null, body.laptopIdNumber || null]
       )
       const row = rows[0]
+      if (!isHome(row.status)) await adjustSchoolLaptopCount(client, row.school_id, -1)
       await logAudit(client, {
         actorEmail: user.email, action: 'create', entityType: 'repair', entityId: row.id,
         summary: `Logged repair ${row.reference_number} for ${row.school_name_snapshot}`,
@@ -79,6 +95,15 @@ export default async function handler(req, res) {
       if (before.rows.length === 0) return true
       const vals = [...values, id]
       await client.query(`UPDATE repairs SET ${sets.join(', ')}, updated_at = now() WHERE id = $${vals.length}`, vals)
+
+      if (body.status !== undefined && isHome(body.status) !== isHome(before.rows[0].status)) {
+        // Adjusted against the school this repair belonged to before this
+        // edit — a simultaneous schoolName reassignment in the same PATCH
+        // doesn't also move the count to the new school; that's a separate,
+        // rare case this doesn't attempt to handle.
+        await adjustSchoolLaptopCount(client, before.rows[0].school_id, isHome(body.status) ? 1 : -1)
+      }
+
       const { changes } = diffApi(toApi(before.rows[0]), body, [...Object.keys(COLUMN), 'schoolName'])
       if (changes) {
         await logAudit(client, {

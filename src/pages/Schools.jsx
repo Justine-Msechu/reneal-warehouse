@@ -191,7 +191,7 @@ export default function Schools() {
             ['name', 'School Name', 'e.g. Mlangarini SS', true],
             ['district', 'District', 'e.g. Arusha DC', false],
             ['region', 'Region', 'e.g. Arusha', false],
-            ['laptopCount', 'Number of Laptops', '0', false],
+            ['laptopCount', 'Number of Laptops', '20', false],
             ['activatedDate', 'Date Activated', '', false],
           ].map(([field, label, placeholder, required]) => (
             <div key={field} className="flex flex-col gap-1">

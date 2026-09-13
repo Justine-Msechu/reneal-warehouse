@@ -16,7 +16,9 @@ CREATE TABLE schools (
   district            TEXT,
   region              TEXT,
   status              TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Deactivated')),
-  laptop_count        INTEGER NOT NULL DEFAULT 0,
+  -- 20 is the standard shipment size per school in this program, not an
+  -- empty/unset marker — new schools start fully stocked, not at zero.
+  laptop_count        INTEGER NOT NULL DEFAULT 20,
   activated_date      DATE,
   deactivated_date    DATE,
   deactivated_reason  TEXT,

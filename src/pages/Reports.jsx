@@ -16,6 +16,7 @@ const STATUS_COLORS = {
   'Under Repair': '#2563eb',
   'Fixed':        '#2d8b39',
   'Returned':     '#6b7280',
+  'Dead':         '#dc2626',
 }
 
 export default function Reports() {

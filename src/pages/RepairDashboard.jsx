@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 const PER_PAGE = 20
 
-const STATUSES = ['All', 'Received', 'Under Repair', 'Fixed', 'Returned']
+const STATUSES = ['All', 'Received', 'Under Repair', 'Fixed', 'Returned', 'Dead']
 
 export default function RepairDashboard() {
   const [repairs, setRepairs] = useState([])

@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       const { rows } = await getPool().query(
         `INSERT INTO schools (name, district, region, status, laptop_count, activated_date, notes)
          VALUES ($1,$2,$3,'Active',$4,$5,$6) RETURNING id`,
-        [body.name, body.district || null, body.region || null, Number(body.laptopCount) || 0,
+        [body.name, body.district || null, body.region || null, Number(body.laptopCount) || 20,
          body.activatedDate || null, body.notes || null]
       )
       return res.status(200).json({ success: true, id: rows[0].id })
